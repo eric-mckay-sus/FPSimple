@@ -5,34 +5,6 @@ using NPOI.XSSF.UserModel;
 
 namespace ParseSampleSheet;
 
-internal static class Config
-{
-    // Folder that contains the .xlsx / .xls files to process
-    public static string InputFolder  = @"C:\LOCAL NETWORK FILES";
-
-    // Folder where individual CSV files will be written (created if it doesn't exist).
-    // Each Excel file produces:  <OutputFolder>\<original-name>.csv
-    public static string OutputFolder = @"C:\LOCAL NETWORK FILES\CSV";
-
-    // Which worksheet to read from each workbook (0 = first sheet, 1 = second, etc.)
-    public static int SheetIndex      = 0;
-
-    // Row number containing column headers (1-based). Set to 0 to skip headers
-    // and auto-generate column letter names (A, B, C...) instead.
-    public static int HeaderRow       = 7;
-
-    // First row of actual data (1-based). Rows above this are ignored.
-    public static int DataStartRow    = 9;
-
-    // Columns to extract, specified by Excel letter (e.g. "A", "C", "F").
-    // Leave the array empty to automatically extract all columns that have data.
-    public static string[] Columns    = ["A", "G", "AC", "AF", "BC"];
-
-    // Number of consecutive fully-empty rows before stopping to read the sheet.
-    // Increase this if target data has intentional blank rows within it.
-    public static int EmptyRowLimit   = 5;
-}
-
 public class Program
 {
     /// <summary>
@@ -170,26 +142,52 @@ public class Program
             ?? throw new InvalidOperationException($"Sheet index {Config.SheetIndex} not found.");
 
         // Determine which column indices to extract (0-based for NPOI)
-        int[] colIndices = ResolveColumns(sheet);
-        if (colIndices.Length == 0)
+        int[] globalColIndices = ResolveGlobalColumns();
+        int[] dataColIndices = ResolveDataColumns(sheet);
+
+        if (dataColIndices.Length == 0)
             throw new InvalidOperationException("No columns found to extract.");
 
         // Open the output CSV for writing, overwriting any existing file
         using var writer = new StreamWriter(csvPath, append: false, Encoding.UTF8);
 
-        // Write the header row first, if one is configured.
-        // Config.HeaderRow is 1-based; NPOI uses 0-based row indices, so subtract 1.
-        // If HeaderRow is 0 (disabled), fall back to auto-generated column letters (A, B, C...).
-        if (Config.HeaderRow > 0)
+        // Handle the global info (model, product, rev, date, issuer)
+        if (Config.GlobalHeaderRow > 0 || Config.GlobalStartRow > 0)
         {
-            var headerRow = sheet.GetRow(Config.HeaderRow - 1);
-            var headers = colIndices.Select(col => CsvEscape(GetCellText(headerRow, col)));
+            writer.WriteLine("# --- GLOBAL METADATA ---");
+
+            // Write Global Headers
+            if (Config.GlobalHeaderRow > 0)
+            {
+                IRow gHeaderRow = sheet.GetRow(Config.GlobalHeaderRow - 1);
+                IEnumerable<string> gHeaders = globalColIndices.Select(col => CsvEscape(GetCellText(gHeaderRow, col)));
+                writer.WriteLine("# " + string.Join(",", gHeaders));
+            }
+
+            // Write Global Data Rows (usually just one row, but handles multiple)
+            var row = sheet.GetRow(Config.GlobalStartRow - 1);
+            var values = globalColIndices.Select(col => GetCellText(row, col)).ToArray();
+
+            if (values.Any(v => !string.IsNullOrWhiteSpace(v)))
+            {
+                writer.WriteLine("# " + string.Join(",", values.Select(CsvEscape)));
+            }
+            writer.WriteLine("# --- END METADATA ---");
+        }
+
+        // Write the data header row first, if one is configured.
+        // Config.DataHeaderRow is 1-based; NPOI uses 0-based row indices, so subtract 1.
+        // If DataHeaderRow is 0 (disabled), fall back to auto-generated column letters (A, B, C...).
+        if (Config.DataHeaderRow > 0)
+        {
+            var headerRow = sheet.GetRow(Config.DataHeaderRow - 1);
+            var headers = dataColIndices.Select(col => CsvEscape(GetCellText(headerRow, col)));
             writer.WriteLine(string.Join(",", headers));
         }
         else
         {
             // No header row configured — generate column letter names instead
-            writer.WriteLine(string.Join(",", colIndices.Select(ColumnLetter)));
+            writer.WriteLine(string.Join(",", dataColIndices.Select(ColumnLetter)));
         }
 
         // Track consecutive empty rows so we know when to stop reading.
@@ -203,7 +201,7 @@ public class Program
         {
             // Read the configured columns from the current row
             var row = sheet.GetRow(rowIndex);
-            var values = colIndices.Select(col => GetCellText(row, col)).ToArray();
+            var values = dataColIndices.Select(col => GetCellText(row, col)).ToArray();
 
             // If every extracted cell is blank, increment the empty streak counter
             // and move on without writing anything to the CSV
@@ -284,17 +282,32 @@ public class Program
     }
 
     /// <summary>
+    /// Resolves the column indices specifically for the Global metadata section.
+    /// </summary>
+    static int[] ResolveGlobalColumns()
+    {
+        if (Config.GlobalColumns.Length > 0)
+        {
+            return Config.GlobalColumns
+                        .Select(c => ColumnIndex(c.Trim().ToUpperInvariant()) - 1)
+                        .Where(i => i >= 0)
+                        .ToArray();
+        }
+        return Array.Empty<int>();
+    }
+
+    /// <summary>
     /// Returns the 0-based column indices to extract, either from the
     /// configured column letters or by auto-detecting all used columns.
     /// </summary>
     /// <param name="sheet">The Excel sheet from which columns should be extracted</param>
-    static int[] ResolveColumns(ISheet sheet)
+    static int[] ResolveDataColumns(ISheet sheet)
     {
-        if (Config.Columns.Length > 0)
+        if (Config.DataColumns.Length > 0)
         {
             // Convert each configured letter (e.g. "A", "C") to a 0-based NPOI
             // column index. ColumnIndex returns a 1-based value, so subtract 1.
-            return Config.Columns
+            return Config.DataColumns
                             .Select(c => ColumnIndex(c.Trim().ToUpperInvariant()) - 1)
                             .Where(i => i >= 0)
                             .ToArray();
