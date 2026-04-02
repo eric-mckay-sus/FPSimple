@@ -68,3 +68,100 @@ h1:focus {
     display: inline-block; /* Aligns with text if used inline */
     flex-shrink: 0;
 }
+
+.centered-container{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Force pagination and headers to stay within the viewport */
+.pagination-container,
+.query-builder-panel {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    bottom: 0;
+    background: white; /* Prevent table rows from showing through */
+    padding-top: 10px 0;
+    z-index: 20;
+    border-top: 1px solid #dee2e6;
+}
+
+/* Custom Data Grid Styling */
+.table-container {
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    width: 100%;
+    overflow-x: visible;
+    transition: all 0.3s ease-in-out;
+    margin-bottom: 0;
+}
+
+.table-container.stale {
+    opacity: 0.5;
+    filter: grayscale(50%);
+    transition: all 0.5s ease-in-out;
+    pointer-events: none;
+}
+
+.table-container.loading {
+    opacity: 0.4;
+    cursor: wait;
+}
+
+/* Scrollable area with fixed height */
+.res-table-wrapper {
+    max-height: calc(100vh - 300px);
+    overflow: auto;
+    position: relative;
+}
+
+/* Professional Table Formatting */
+.res-table {
+    min-width: 600px;
+    width: 100%;
+    border-collapse: separate; /* Required for sticky headers to work correctly */
+    border-spacing: 0;
+    margin-bottom: 0;
+}
+
+/* Center headers */
+.res-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background-color: #f8f9fa;
+    color: #495057;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
+    padding: 12px 8px;
+
+    text-align: center;
+}
+
+.res-table tbody td {
+    padding: 8px;
+    vertical-align: middle;
+    color: #333;
+    border-bottom: 1px solid #f0f0f0;
+
+    text-align: center;
+}
+
+/* This creates the 'sandbox' for the wide table */
+.table-responsive-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    position: relative;
+    max-height: calc(100vh - 100px);
+    border: 1px solid #dee2e6;
+    margin-bottom: 1rem;
+    container-type: inline-size;
+    container-name: table-container;
+}

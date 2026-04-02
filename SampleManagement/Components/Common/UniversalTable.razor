@@ -1,0 +1,154 @@
+@typeparam T
+@using System.Reflection
+@using System.ComponentModel.DataAnnotations.Schema
+
+@if(OnPageChange.HasDelegate){
+    @* PAGINATION TOP *@
+    <div class="pagination-container d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center">
+            <div class="text-muted me-3">Showing @_startRecord to @_endRecord of @TotalCount</div>
+            @* Page Size Dropdown *@
+            <div class="d-flex align-items-center me-3">
+                <span class="text-muted me-2">Rows:</span>
+                <select class="form-select form-select-sm" style="width:auto"
+                        @onchange="async (e) => await OnPageSizeChange.InvokeAsync(int.Parse(e.Value.ToString()))">
+                    <option value="10" selected="@(PageSize == 10)">10</option>
+                    <option value="25" selected="@(PageSize == 25)">25</option>
+                    <option value="50" selected="@(PageSize == 50)">50</option>
+                    <option value="100" selected="@(PageSize == 100)">100</option>
+                    <option value="500" selected="@(PageSize == 500)">500</option>
+                </select>
+            </div>
+        </div>
+        <nav>
+            <ul class="pagination mt-3">
+                <div class="d-flex align-items-center me-3 ms-auto">
+                    <span class="text-muted me-2">Go to:</span>
+                    <div class="input-group input-group-sm" style="width: 75px;">
+                        <input type="number" class="form-control"
+                            min="1" max="@TotalPages"
+                            @bind="_jumpPage"
+                            @onkeyup="@(e => e.Key == "Enter" ? HandleJumpPage() : Task.CompletedTask)"
+                            placeholder="@CurrentPage" />
+                        <button class="btn btn-outline-info btn-sm" @onclick="HandleJumpPage">Go</button>
+                    </div>
+                    <span class="text-muted ms-2">of @TotalPages</span>
+                </div>
+                <li class="page-item @(CurrentPage == 1 ? "disabled" : "") me-2">
+                    <button class="btn btn-outline-secondary" @onclick="() => OnPageChange.InvokeAsync(CurrentPage - 1)">&laquo; Previous</button>
+                </li>
+                <li class="page-item @(CurrentPage == TotalPages ? "disabled" : "")">
+                    <button class="btn btn-primary" @onclick="() => OnPageChange.InvokeAsync(CurrentPage + 1)">Next &raquo;</button>
+                </li>
+            </ul>
+        </nav>
+    </div>
+}
+
+<div class="table-responsive-wrapper">
+    <div class="table-container @(IsStale ? "stale" : "")">
+        <table class="table res-table table-striped text-nowrap">
+            <thead>
+                <tr>
+                    @foreach (var prop in _cachedProps)
+                    {
+                        var attribute = prop.GetCustomAttribute<ColumnAttribute>();
+                        var displayName = attribute?.Name ?? prop.Name;
+                        <th @onclick="() => OnSort.InvokeAsync(prop.Name)"
+                        class="col-@prop.Name"
+                        style=@(OnSort.HasDelegate ? "cursor:pointer" : "cursor:auto")
+                        title=@(OnSort.HasDelegate ? $"Toggle sort for {displayName}" : "")>
+                            @displayName @SortIcon(prop.Name)
+                        </th>
+                    }
+                     @if (OnDelete.HasDelegate || OnExpand.HasDelegate){
+                        <th>Actions</th> @* For the expand and delete buttons *@
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                <Virtualize TItem="T" Items="@(Items?.ToList())" Context="item" OverscanCount="8" ItemSize="41">
+                    <tr @key="item"
+                        @onclick="() => _attentionItem=_attentionItem?.Equals(item) == true ? default : item"
+                        class="@GetRowClass(item)">
+                        @foreach (var prop in _cachedProps)
+                        {
+                            <td class="col-@prop.Name">@(prop.GetValue(item)?.ToString() ?? "—")</td>
+                        }
+                        @if (OnExpand.HasDelegate || OnDelete.HasDelegate) {
+                            <td>
+                                @* Only show the expand button if there's an expand binding *@
+                                @if (OnExpand.HasDelegate){
+                                    <button class="btn btn-link btn-action p-0 text-secondary" @onclick="() => OnExpand.InvokeAsync(item)" title="Expand">
+                                        <Icon Name="IconName.List" Size="IconSize.x4" />
+                                    </button>
+                                }
+                                @* Only show the delete button if there's a delete binding *@
+                                @if (OnDelete.HasDelegate){
+                                    <button class="btn btn-link btn-action p-0 text-danger ms-3" @onclick="() => OnDelete.InvokeAsync(item)" title="Delete">
+                                        <Icon Name="IconName.Trash" Size="IconSize.x4" />
+                                    </button>
+                                }
+                            </td>
+                        }
+                    </tr>
+                </Virtualize>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [Parameter] public IEnumerable<T>? Items { get; set; } // The data to display
+    [Parameter] public EventCallback<T> OnDelete { get; set; } // The action to bind to the delete button being pressed
+    [Parameter] public EventCallback<T> OnExpand { get; set; } // The action to bind to the expand button being pressed
+
+    [Parameter] public T? Target { get; set; } // The row to highlight (its information is shown)
+    private T? _attentionItem { get; set; } // Allows the user to highlight a row for focus (no information shown)
+    [Parameter] public string? TargetStyle { get; set; } // The highlight style for the target row
+    private string GetRowClass(T item)
+    {
+        if (item == null) return "";
+
+        // Priority 1: the row being expanded (target)
+        if (item.Equals(Target))
+            return TargetStyle ?? "table-primary";
+
+        // Priority 2: the row the user clicked to "watch"
+        if (item.Equals(_attentionItem))
+            return "table-active cursor-pointer";
+
+        return "cursor-pointer";
+    }
+
+    // A cache of the properties of T so it's not invoked for each header, excluding those marked NotDisplayed
+    private PropertyInfo[] _cachedProps = typeof(T).GetProperties().ToArray();
+
+    // Sorting & staleness
+    [Parameter] public EventCallback<string> OnSort { get; set; } // Handles everything related to sorting
+    [Parameter] public Func<string, string> GetSortIcon { get; set; } = (col) => "";
+    [Parameter] public bool IsStale { get; set; } = false;
+    private string SortIcon(string col) => GetSortIcon?.Invoke(col) ?? "";
+
+    // Pagination Params
+    [Parameter] public int CurrentPage { get; set; }
+    [Parameter] public int TotalPages { get; set; }
+    [Parameter] public int TotalCount { get; set; }
+    [Parameter] public int PageSize { get; set; }
+    [Parameter] public EventCallback<int> OnPageChange { get; set; }
+    [Parameter] public EventCallback<int> OnPageSizeChange { get; set; }
+    private string _jumpPage = "";
+    private async Task HandleJumpPage()
+    {
+        if (int.TryParse(_jumpPage, out int targetPage))
+        {
+            // Clamp the value between 1 and TotalPages
+            targetPage = Math.Max(1, Math.Min(targetPage, TotalPages));
+            _jumpPage = targetPage.ToString(); // Update UI to show clamped value
+            await OnPageChange.InvokeAsync(targetPage);
+        }
+    }
+    // Denotes range of records shown
+    private int _startRecord => (CurrentPage - 1) * PageSize + 1;
+    private int _endRecord => Math.Min(CurrentPage * PageSize, TotalCount);
+}
