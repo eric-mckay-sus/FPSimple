@@ -24,7 +24,7 @@ public class Program
                     string csvName = Path.GetFileNameWithoutExtension(fileName) + ".csv";
                     string csvPath = Path.Combine(Config.OutputFolder, csvName);
                     int numRows = ProcessFile(fileName, csvPath);
-                    Console.WriteLine("Parse successful.");
+                    Console.WriteLine($"File successfully parsed to {Config.OutputFolder}.");
                     Console.WriteLine($"  {Path.GetFileName(fileName)}  ->  {csvName} ... {numRows} data row(s)");
                     return;
                 }

@@ -102,10 +102,18 @@ public class UploadFoolproofToDb
             row["rank"] = csv.GetField("RANK");
             row["location"] = csv.GetField("LOCATION");
 
-            // Extract number after '#'
+            // Ideally, the number after '#', but if that's missing, just get any number from the cell (default to null)
             string dummyRaw = csv.GetField("DUMMY SAMPLE REQUIRED?") ?? "";
             Match match = Regex.Match(dummyRaw, @"#(\d+)");
-            row["partMasterNum"] = match.Success ? byte.Parse(match.Groups[1].Value) : DBNull.Value;
+            if (match.Success)
+                row["partMasterNum"] = short.Parse(match.Groups[1].Value); // get just the part after the # (not including it)
+            else
+            {
+                if(short.TryParse(new string(dummyRaw.Where(char.IsDigit).ToArray()), out short partNum))
+                    row["partMasterNum"] = partNum;
+                else
+                    row["partMasterNum"] = DBNull.Value;
+            }
 
             dt.Rows.Add(row);
         }
@@ -142,7 +150,7 @@ public class UploadFoolproofToDb
         // Concatenate base model (parts[0]) and product (parts[1]) from raw line
         model = $"{parts[0].Trim()} {parts[1].Trim()}";
         rev = TranslateRevString(parts[2].Trim());
-        date = DateTime.Parse(parts[3].Trim());
+        date = DateTime.Parse(parts[3].Trim().Replace("th", "", StringComparison.OrdinalIgnoreCase));
         issuer = parts[4].Trim();
 
         // Skip the end metadata line
@@ -162,8 +170,9 @@ public class UploadFoolproofToDb
         {
             "ORIG" => "0",
             "DRAFT" => "0",
-            _ => revString.Replace("R", "", StringComparison.OrdinalIgnoreCase)
+            _ => revString.Replace("REV", "", StringComparison.OrdinalIgnoreCase)
         };
+        revString = revString.Replace("R", "", StringComparison.OrdinalIgnoreCase);
 
         return byte.Parse(revString);
     }
