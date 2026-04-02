@@ -1,0 +1,38 @@
+﻿<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <div class="sidebar-header">
+        <div class="header-content">
+            <a class="stanley-icon" href=""></a>
+            <a class="header-brand" href="">Authorized Reset</a>
+        </div>
+    </div>
+
+    <nav class="flex-column">
+        <div class="nav-item">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <Icon Name="IconName.Clock" />
+                <label>Historical Records</label>
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="view-lines">
+                <Icon Name="IconName.FilterSquare" />
+                <label>View Line Status</label>
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="manage">
+                <Icon Name="IconName.PeopleFill" />
+                <label>Manage Associates & <br> Lines</label>
+            </NavLink>
+        </div>
+
+        <div class="nav-item">
+            <NavLink class="nav-link" href="import-cmms-mappings">
+                <Icon Name="IconName.CloudArrowUpFill" />
+                <label>Update CMMS</label>
+            </NavLink>
+        </div>
+    </nav>
+</div>
