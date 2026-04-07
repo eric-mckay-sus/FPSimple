@@ -1,4 +1,6 @@
-﻿<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+﻿@using Microsoft.AspNetCore.Components.Authorization
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <div class="sidebar-header">
@@ -28,11 +30,15 @@
             </NavLink>
         </div>
 
-        <div class="nav-item">
-            <NavLink class="nav-link" href="approve-samples" Match="NavLinkMatch.All">
-                <Icon Name="IconName.Check2" />
-                <label>Approve Samples</label>
-            </NavLink>
-        </div>
+        <AuthorizeView Roles="Admin">
+            <Authorized>
+                <div class="nav-item">
+                    <NavLink class="nav-link" href="approve-samples" Match="NavLinkMatch.All">
+                        <Icon Name="IconName.Check2" />
+                        <label>Approve Samples</label>
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
     </nav>
 </div>

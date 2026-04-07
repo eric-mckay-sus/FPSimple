@@ -12,6 +12,7 @@ public class FPSampleDbContext(DbContextOptions<FPSampleDbContext> options) : Db
     public DbSet<FoolproofEntry> FoolproofInfo { get; set; }
     public DbSet<ModelLine> ModelToLine { get; set; }
     public DbSet<Sample> Samples { get; set; }
+    public DbSet<Associate> AssociateInfo { get; set; }
 }
 
 [PrimaryKey(nameof(Model), nameof(Revision), nameof(Location), nameof(DummySampleNum))]

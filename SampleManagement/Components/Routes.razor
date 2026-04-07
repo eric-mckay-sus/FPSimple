@@ -1,6 +1,39 @@
-﻿<Router AppAssembly="typeof(Program).Assembly">
-    <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
-    </Found>
-</Router>
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using SampleManagement.Components.HttpErrors
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="@typeof(Program).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)">
+
+                <NotAuthorized>
+                    @if (context.User.Identity?.IsAuthenticated == false)
+                    {
+                        @* When the user isn't in the DB at all (401 logic) *@
+                        <Unauthorized />
+                    }
+                    else
+                    {
+                        @* When the user is in the DB but lacks the "Admin" role (403 logic) *@
+                        <Forbidden />
+                    }
+                </NotAuthorized>
+                @* While the AutoAuthStateProvider is hitting the DB (probably never shows) *@
+                <Authorizing>
+                    <div class="d-flex justify-content-center mt-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Verifying Credentials...</span>
+                        </div>
+                    </div>
+                </Authorizing>
+
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <LayoutView Layout="@typeof(Layout.MainLayout)">
+                <NotFound />
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>
