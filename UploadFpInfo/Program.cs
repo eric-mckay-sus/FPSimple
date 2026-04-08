@@ -106,32 +106,6 @@ public class UploadFoolproofToDb
     /// <exception cref="Exception">When the file does not have a sheet at the specified index</exception>
     private static async Task<(bool, bool)> ProcessFile(string excelPath)
     {
-        // Get and validate a model to which this file is to be associated
-        Console.WriteLine($"Please enter the C. Core model name for the contents of {Path.GetFileName(excelPath)} that will be imported:");
-        bool isValidModel;
-        string actualModel;
-        do // Use a do-while loop to get data and try again on failure
-        {
-            actualModel = Console.ReadLine()?.Trim() ?? string.Empty;
-            isValidModel = await ValidateModel(actualModel);
-            if (!isValidModel) Console.WriteLine($"{actualModel} is not a model in the model to line database. Please enter a different model name:");
-        } while (!isValidModel);
-
-        Console.Write($"If you wish to import dummy samples used for just one type of this model, please enter its Excel column name from BM to CJ. Otherwise, just press enter: ");
-        bool isFiltering;
-        int targetColIndex;
-        do
-        {
-            string filterColumnName = Console.ReadLine() ?? string.Empty;
-            targetColIndex = ColumnIndex(filterColumnName);
-            isFiltering = true;
-            if(targetColIndex < 64 || targetColIndex > 87)
-            {
-                if (targetColIndex != -1) Console.Write($"{filterColumnName} is outside the valid range of BM-CJ. Please enter a different column name (or just press ENTER to add no filter):");
-                isFiltering = false;
-            }
-        } while(!(targetColIndex == -1 || isFiltering));
-
         // Load Excel file
         IWorkbook workbook;
         using (var fs = new FileStream(excelPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
@@ -150,80 +124,128 @@ public class UploadFoolproofToDb
         // Get column indices associated with column names
         Dictionary<string, int> colMap = MapHeaderIndices(sheet);
 
-        // Initialize DataTable for rows
-        DataTable dt = CreateFoolproofDataTable();
-        int rowIndex = Config.DataStartRow - 1;
-        int emptyStreak = 0;
-        int rowsProcessed = 0;
+        // Initialize flags for file processing loop
         bool hasDuplicate = false;
         bool hasMiscError = false;
+        bool applyAnotherFilter;
 
-        while (rowIndex <= sheet.LastRowNum && emptyStreak < Config.EmptyRowLimit)
+        do
         {
-            IRow row = sheet.GetRow(rowIndex);
-            if (IsRowEmpty(row))
+            // Get and validate a model to which this file is to be associated
+            Console.WriteLine($"Please enter the C. Core model name for the contents of {Path.GetFileName(excelPath)} to be imported:");
+            bool isValidModel;
+            string model;
+            do // Use a do-while loop to get data and try again on failure
             {
-                emptyStreak++;
+                model = Console.ReadLine()?.Trim() ?? string.Empty;
+                isValidModel = await ValidateModel(model);
+                if (isValidModel)
+                    RewriteInColor(model, ConsoleColor.Green);
+                else {
+                    RewriteInColor(model, ConsoleColor.Red);
+                    Console.WriteLine($"{model} is not a model in the model to line database. Please enter a different model name:");
+                }
+            } while (!isValidModel);
+
+            Console.WriteLine($"Enter target Excel column name from BM to CJ, R to re-enter model name, or just ENTER to proceed without a filter:");
+
+            bool isFiltering;
+            int targetColIndex;
+            do
+            {
+                string filterColumnName = Console.ReadLine() ?? string.Empty;
+                targetColIndex = ColumnIndex(filterColumnName);
+                isFiltering = true;
+                if(targetColIndex < 64 || targetColIndex > 87)
+                {
+                    if (targetColIndex != -1) {
+                        RewriteInColor(filterColumnName, ConsoleColor.Red);
+                        Console.WriteLine($"{filterColumnName} is outside the valid range of BM-CJ. Please enter a different column name (or just press ENTER to add no filter):");
+                    }
+                    isFiltering = false;
+                }
+            } while(!(targetColIndex == -1 || isFiltering));
+
+            // Initialize DataTable for rows
+            DataTable dt = CreateFoolproofDataTable();
+            int rowIndex = Config.DataStartRow - 1;
+            int emptyStreak = 0;
+            int rowsProcessed = 0;
+
+            // Loop through each row in the file, or until we've seen a certain number of empty rows
+            while (rowIndex <= sheet.LastRowNum && emptyStreak < Config.EmptyRowLimit)
+            {
+                IRow row = sheet.GetRow(rowIndex);
+                if (IsRowEmpty(row))
+                {
+                    emptyStreak++;
+                    rowIndex++;
+                    continue;
+                }
+
+                emptyStreak = 0;
+
+                short? dummySampleNum = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
+
+                bool passesFilter = true; // denotes that the current row either fulfills the filter or there is no filter to fulfill
+                if (isFiltering)
+                {
+                    string filterCellValue = GetCellText(row, targetColIndex);
+                    if (string.IsNullOrWhiteSpace(filterCellValue))
+                    {
+                        passesFilter = false;
+                    }
+                }
+
+                // Only add (and count) the row if it has a dummy sample associated with it (otherwise it is irrelevant for label making purposes)
+                if (dummySampleNum != null && passesFilter)
+                {
+                    try
+                    {
+                        DataRow dr = dt.NewRow();
+
+                        // Assign metadata
+                        dr["model"] = model;
+                        dr["revision"] = Revision;
+                        dr["issueDate"] = IssueDate;
+                        dr["issuer"] = (object?)Issuer ?? DBNull.Value;
+
+                        // Get the data for this row
+                        dr["failureMode"] = GetCellText(row, colMap["PROCESS FAILURE MODE"]);
+                        dr["rank"] = GetCellText(row, colMap["RANK"]);
+                        dr["location"] = GetCellText(row, colMap["LOCATION"]);
+                        dr["dummySampleNum"] = dummySampleNum;
+
+                        dt.Rows.Add(dr);
+                        await WriteRowToDatabase(dr);
+                        rowsProcessed++;
+
+                    }
+                    catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
+                    {
+                        if (!hasDuplicate) Console.WriteLine();
+                        PrintInColor($"\t[ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {model} for dummy sample #{dummySampleNum}", ConsoleColor.Cyan);
+                        hasDuplicate = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (!hasMiscError) Console.WriteLine();
+                        PrintInColor($"\t[ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}", ConsoleColor.Yellow);
+                        hasMiscError = true;
+                    }
+                }
                 rowIndex++;
-                continue;
             }
 
-            emptyStreak = 0;
+            // Report parse success/failure
+            ShowPreview(dt, rowsProcessed);
 
-            short? dummySampleNum = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
+            Console.Write($"\nWould you like to apply another filter to this same file? (y/n): ");
+            string response = Console.ReadLine()?.Trim().ToLower() ?? "";
+            applyAnotherFilter = response == "y" || response == "yes";
 
-            bool passesFilter = true; // denotes that the current row either fulfills the filter or there is no filter to fulfill
-            if (isFiltering)
-            {
-                string filterCellValue = GetCellText(row, targetColIndex);
-                if (string.IsNullOrWhiteSpace(filterCellValue))
-                {
-                    passesFilter = false;
-                }
-            }
+        } while (applyAnotherFilter);
 
-            // Only add (and count) the row if it has a dummy sample associated with it (otherwise it is irrelevant for label making purposes)
-            if (dummySampleNum != null && passesFilter)
-            {
-                try
-                {
-                    DataRow dr = dt.NewRow();
-
-                    // Assign metadata
-                    dr["model"] = actualModel;
-                    dr["revision"] = Revision;
-                    dr["issueDate"] = IssueDate;
-                    dr["issuer"] = (object?)Issuer ?? DBNull.Value;
-
-                    // Get the data for this row
-                    dr["failureMode"] = GetCellText(row, colMap["PROCESS FAILURE MODE"]);
-                    dr["rank"] = GetCellText(row, colMap["RANK"]);
-                    dr["location"] = GetCellText(row, colMap["LOCATION"]);
-                    dr["dummySampleNum"] = dummySampleNum;
-
-                    dt.Rows.Add(dr);
-                    await WriteRowToDatabase(dr);
-                    rowsProcessed++;
-
-                }
-                catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
-                {
-                    if (!hasDuplicate) Console.WriteLine();
-                    PrintInColor($"\t[ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {actualModel} for dummy sample #{dummySampleNum}", ConsoleColor.Cyan);
-                    hasDuplicate = true;
-                }
-                catch (Exception ex)
-                {
-                    if (!hasMiscError) Console.WriteLine();
-                    PrintInColor($"\t[ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}", ConsoleColor.Yellow);
-                    hasMiscError = true;
-                }
-            }
-            rowIndex++;
-        }
-
-        // Report parse success/failure
-        ShowPreview(dt, rowsProcessed);
         return (hasDuplicate, hasMiscError);
     }
 
@@ -526,5 +548,16 @@ public class UploadFoolproofToDb
         Console.ForegroundColor = color;
         Console.WriteLine(msg);
         Console.ResetColor();
+    }
+
+    /// <summary>
+    /// Overwrites the console contents on the last line with <paramref name="msg"/> in the specified <paramref name="color"/>.
+    /// </summary>
+    /// <param name="msg"></param>
+    /// <param name="color"></param>
+    private static void RewriteInColor(string msg, ConsoleColor color)
+    {
+        Console.SetCursorPosition(0, Console.CursorTop-1);
+        PrintInColor(msg, color);
     }
 }
