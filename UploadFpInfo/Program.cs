@@ -10,6 +10,7 @@ namespace UploadFpInfo;
 
 /// <summary>
 /// Consolidates the parse/upload process for foolproof dummy sample sheets
+/// The model to line database must be populated for insertion validation to succeed
 /// </summary>
 public class UploadFoolproofToDb
 {
@@ -35,7 +36,7 @@ public class UploadFoolproofToDb
             }
             else if (File.Exists(path) && IsExcelFile(path))
             {
-                (containsDuplicate, containsMiscError) = await ProcessSingleFile(path);
+                (containsDuplicate, containsMiscError) = await ProcessFile(path);
                 if (containsDuplicate) PrintInColor(duplicateMessage ,ConsoleColor.Cyan);
             }
             else
@@ -55,7 +56,7 @@ public class UploadFoolproofToDb
     /// <summary>
     /// Process a batch of FP info files
     /// </summary>
-    /// <returns>Whether the batch contains a file with entries that would have duplicate PKs in the DB</returns>
+    /// <returns>An tuple representing whether the batch contains a file that 1) contains PK collision(s) and 2) has a miscellaneous error</returns>
     /// <exception cref="DirectoryNotFoundException">When the input location does not exist</exception>
     private static async Task<(bool, bool)> RunBatch()
     {
@@ -83,7 +84,7 @@ public class UploadFoolproofToDb
         {
             try
             {
-                (currentContainsDuplicate, currentContainsMisc) = await ProcessSingleFile(file.FullName);
+                (currentContainsDuplicate, currentContainsMisc) = await ProcessFile(file.FullName);
 
                 // Assign batch & misc duplicate flag to current if it isn't already set (OR is short-circuiting so this is fast)
                 batchContainsDuplicate = batchContainsDuplicate || currentContainsDuplicate;
@@ -98,14 +99,38 @@ public class UploadFoolproofToDb
     }
 
     /// <summary>
-    /// Process one FP info file
+    /// Processes one FP info file
     /// </summary>
     /// <param name="excelPath">The path to the file to be processed</param>
-    /// <returns>A Task representing whether a would-be duplicate was encountered</returns>
+    /// <returns>A Task with a duplicate flag and a miscellaneous error flag</returns>
     /// <exception cref="Exception">When the file does not have a sheet at the specified index</exception>
-    private static async Task<(bool, bool)> ProcessSingleFile(string excelPath)
+    private static async Task<(bool, bool)> ProcessFile(string excelPath)
     {
-        Console.Write($"Processing {Path.GetFileName(excelPath)}... ");
+        // Get and validate a model to which this file is to be associated
+        Console.WriteLine($"Please enter the C. Core model name for the contents of {Path.GetFileName(excelPath)} that will be imported:");
+        bool isValidModel;
+        string actualModel;
+        do // Use a do-while loop to get data and try again on failure
+        {
+            actualModel = Console.ReadLine()?.Trim() ?? string.Empty;
+            isValidModel = await ValidateModel(actualModel);
+            if (!isValidModel) Console.WriteLine($"{actualModel} is not a model in the model to line database. Please enter a different model name:");
+        } while (!isValidModel);
+
+        Console.Write($"If you wish to import dummy samples used for just one type of this model, please enter its Excel column name from BM to CJ. Otherwise, just press enter: ");
+        bool isFiltering;
+        int targetColIndex;
+        do
+        {
+            string filterColumnName = Console.ReadLine() ?? string.Empty;
+            targetColIndex = ColumnIndex(filterColumnName);
+            isFiltering = true;
+            if(targetColIndex < 64 || targetColIndex > 87)
+            {
+                if (targetColIndex != -1) Console.Write($"{filterColumnName} is outside the valid range of BM-CJ. Please enter a different column name (or just press ENTER to add no filter):");
+                isFiltering = false;
+            }
+        } while(!(targetColIndex == -1 || isFiltering));
 
         // Load Excel file
         IWorkbook workbook;
@@ -120,7 +145,7 @@ public class UploadFoolproofToDb
                     ?? throw new Exception($"Sheet index {Config.SheetIndex} not found.");
 
         // Extract metadata (header row)
-        (string? Model, byte Revision, DateTime IssueDate, string? Issuer) = ParseMetadata(sheet);
+        (byte Revision, DateTime IssueDate, string? Issuer) = ParseMetadata(sheet);
 
         // Get column indices associated with column names
         Dictionary<string, int> colMap = MapHeaderIndices(sheet);
@@ -133,89 +158,165 @@ public class UploadFoolproofToDb
         bool hasDuplicate = false;
         bool hasMiscError = false;
 
-            while (rowIndex <= sheet.LastRowNum && emptyStreak < Config.EmptyRowLimit)
+        while (rowIndex <= sheet.LastRowNum && emptyStreak < Config.EmptyRowLimit)
+        {
+            IRow row = sheet.GetRow(rowIndex);
+            if (IsRowEmpty(row))
             {
-                IRow row = sheet.GetRow(rowIndex);
-                if (IsRowEmpty(row))
-                {
-                    emptyStreak++;
-                    rowIndex++;
-                    continue;
-                }
-
-                emptyStreak = 0;
-
-                short? dummySampleNum = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
-
-                // Only add (and count) the row if it has a dummy sample associated with it (otherwise it is irrelevant for label making purposes)
-                if (dummySampleNum != null)
-                {
-                    try
-                    {
-                        DataRow dr = dt.NewRow();
-
-                        // Assign metadata
-                        dr["model"] = Model;
-                        dr["revision"] = Revision;
-                        dr["issueDate"] = IssueDate;
-                        dr["issuer"] = (object?)Issuer ?? DBNull.Value;
-
-                        // Get the data for this row
-                        dr["failureMode"] = GetCellText(row, colMap["PROCESS FAILURE MODE"]);
-                        dr["rank"] = GetCellText(row, colMap["RANK"]);
-                        dr["location"] = GetCellText(row, colMap["LOCATION"]);
-                        dr["dummySampleNum"] = dummySampleNum;
-
-                        dt.Rows.Add(dr);
-                        await WriteSingleRowToDatabase(dr);
-                        rowsProcessed++;
-
-                    }
-                    catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
-                    {
-                        if (!hasDuplicate) Console.WriteLine();
-                        PrintInColor($"   [ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {Model} for dummy sample #{dummySampleNum}", ConsoleColor.Cyan);
-                        hasDuplicate = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        if (!hasMiscError) Console.WriteLine();
-                        PrintInColor($"   [ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}", ConsoleColor.Yellow);
-                        hasMiscError = true;
-                    }
-                }
+                emptyStreak++;
                 rowIndex++;
+                continue;
             }
 
-        // Bulk upload to SQL
-        if (rowsProcessed > 0)
-        {
-            Console.WriteLine($"Uploaded {rowsProcessed} rows.");
+            emptyStreak = 0;
+
+            short? dummySampleNum = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
+
+            bool passesFilter = true; // denotes that the current row either fulfills the filter or there is no filter to fulfill
+            if (isFiltering)
+            {
+                string filterCellValue = GetCellText(row, targetColIndex);
+                if (string.IsNullOrWhiteSpace(filterCellValue))
+                {
+                    passesFilter = false;
+                }
+            }
+
+            // Only add (and count) the row if it has a dummy sample associated with it (otherwise it is irrelevant for label making purposes)
+            if (dummySampleNum != null && passesFilter)
+            {
+                try
+                {
+                    DataRow dr = dt.NewRow();
+
+                    // Assign metadata
+                    dr["model"] = actualModel;
+                    dr["revision"] = Revision;
+                    dr["issueDate"] = IssueDate;
+                    dr["issuer"] = (object?)Issuer ?? DBNull.Value;
+
+                    // Get the data for this row
+                    dr["failureMode"] = GetCellText(row, colMap["PROCESS FAILURE MODE"]);
+                    dr["rank"] = GetCellText(row, colMap["RANK"]);
+                    dr["location"] = GetCellText(row, colMap["LOCATION"]);
+                    dr["dummySampleNum"] = dummySampleNum;
+
+                    dt.Rows.Add(dr);
+                    await WriteRowToDatabase(dr);
+                    rowsProcessed++;
+
+                }
+                catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
+                {
+                    if (!hasDuplicate) Console.WriteLine();
+                    PrintInColor($"\t[ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {actualModel} for dummy sample #{dummySampleNum}", ConsoleColor.Cyan);
+                    hasDuplicate = true;
+                }
+                catch (Exception ex)
+                {
+                    if (!hasMiscError) Console.WriteLine();
+                    PrintInColor($"\t[ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}", ConsoleColor.Yellow);
+                    hasMiscError = true;
+                }
+            }
+            rowIndex++;
         }
-        else
-        {
-            Console.WriteLine("No rows with valid data.");
-        }
+
+        // Report parse success/failure
+        ShowPreview(dt, rowsProcessed);
         return (hasDuplicate, hasMiscError);
     }
 
     /// <summary>
-    /// Gets the model, revision, issue date and issuer from the file header
+    /// Prints the contents of <paramref name="dt"/> to the console
+    /// </summary>
+    /// <param name="dt">The DataTable to display</param>
+    /// <param name="rowsProcessed">The number of rows processed</param>
+    public static void ShowPreview(DataTable dt, int rowsProcessed)
+    {
+        if(rowsProcessed == 0){
+            PrintInColor("No rows with valid data (under current filters).", ConsoleColor.DarkYellow);
+            return;
+        }
+
+        Console.WriteLine();
+        PrintInColor($"--- UPLOAD SUMMARY: {rowsProcessed} ROWS PROCESSED ---", ConsoleColor.Green);
+
+        // Define column widths for the ASCII table
+        int modelWidth = 15;
+        int modeWidth = 30;
+        int locWidth = 15;
+        int dummyWidth = 10;
+
+        // Print table header
+        string header = $"| {"Model".PadRight(modelWidth)} | {"Failure Mode".PadRight(modeWidth)} | {"Loc".PadRight(locWidth)} | {"Dummy #".PadRight(dummyWidth)} |";
+        string divider = new('-', header.Length);
+
+        Console.WriteLine(divider);
+        Console.WriteLine(header);
+        Console.WriteLine(divider);
+
+        // Print each row from the DataTable
+        foreach (DataRow row in dt.Rows)
+        {
+            string modelStr = row["model"]?.ToString()?.Length > modelWidth
+                ? string.Concat(row["model"].ToString().AsSpan(0, modelWidth - 3), "...")
+                : row["model"]?.ToString() ?? "";
+
+            string modeStr = row["failureMode"]?.ToString()?.Length > modeWidth
+                ? string.Concat(row["failureMode"].ToString().AsSpan(0, modeWidth - 3), "...")
+                : row["failureMode"]?.ToString() ?? "";
+
+            string locStr = row["location"]?.ToString()?.Length > locWidth
+                ? string.Concat(row["location"].ToString().AsSpan(0, locWidth - 3), "...")
+                : row["location"]?.ToString() ?? "";
+
+            string dummyStr = row["dummySampleNum"]?.ToString() ?? "";
+
+            Console.WriteLine($"| {modelStr.PadRight(modelWidth)} | {modeStr.PadRight(modeWidth)} | {locStr.PadRight(locWidth)} | {dummyStr.PadRight(dummyWidth)} |");
+        }
+
+        Console.WriteLine(divider);
+    }
+
+    /// <summary>
+    /// Verifies that a particular model exists in the model to line (MTL) database
+    /// </summary>
+    /// <param name="toValidate">The model name to validate</param>
+    /// <returns>Whether <paramref name="toValidate"/> exists in the MTL database</returns>
+    private static async Task<bool> ValidateModel(string? toValidate)
+    {
+        if(string.IsNullOrWhiteSpace(toValidate)) return false;
+
+        using var conn = new SqlConnection(Config.GetConnectionString());
+        await conn.OpenAsync();
+
+        string sql = @"
+            SELECT COUNT(*) FROM dbo.ModelToLine
+                   WHERE shortDesc LIKE @model";
+
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@model", toValidate);
+
+        int count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
+
+        return count > 0;
+    }
+
+    /// <summary>
+    /// Gets the revision, issue date and issuer from the file header
     /// </summary>
     /// <param name="sheet">The sheet to be parsed</param>
     /// <returns>A tuple containing the desired metadata</returns>
-    private static (string Model, byte Revision, DateTime IssueDate, string Issuer) ParseMetadata(ISheet sheet)
+    private static (byte Revision, DateTime IssueDate, string Issuer) ParseMetadata(ISheet sheet)
     {
         IRow dataRow = sheet.GetRow(Config.GlobalStartRow - 1);
-        int[] globalIndices = Config.GlobalColumns.Select(c => ColumnIndex(c) - 1).ToArray();
+        int[] metadataIndices = Config.GlobalColumns.Select(ColumnIndex).ToArray();
 
-        string baseModel = GetCellText(dataRow, globalIndices[0]);
-        string product = GetCellText(dataRow, globalIndices[1]);
-        string revRaw = GetCellText(dataRow, globalIndices[2]);
-        string dateRaw = GetCellText(dataRow, globalIndices[3]);
-        string issuer = GetCellText(dataRow, globalIndices[4]);
+        string revRaw = GetCellText(dataRow, metadataIndices[0]);
+        string dateRaw = GetCellText(dataRow, metadataIndices[1]);
+        string issuer = GetCellText(dataRow, metadataIndices[2]);
 
-        string model = $"{baseModel} {product}".Trim();
         byte revision = TranslateRevString(revRaw);
 
         // Clean common Excel date string artifacts
@@ -227,14 +328,14 @@ public class UploadFoolproofToDb
         if (!DateTime.TryParse(cleanDate, out DateTime issueDate))
             issueDate = DateTime.MinValue;
 
-        return (model, revision, issueDate, issuer);
+        return (revision, issueDate, issuer);
     }
 
     /// <summary>
     /// Creates a dictionary mapping header names to indices
     /// </summary>
-    /// <param name="sheet"></param>
-    /// <returns></returns>
+    /// <param name="sheet">The sheet in which the headers reside</param>
+    /// <returns>The dictionary mapping header names to header indices</returns>
     private static Dictionary<string, int> MapHeaderIndices(ISheet sheet)
     {
         var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -280,7 +381,7 @@ public class UploadFoolproofToDb
     /// </summary>
     /// <param name="dr">The DataRow whose contents will be written to the server</param>
     /// <returns></returns>
-    private static async Task WriteSingleRowToDatabase(DataRow dr)
+    private static async Task WriteRowToDatabase(DataRow dr)
     {
         using var conn = new SqlConnection(Config.GetConnectionString());
         await conn.OpenAsync();
@@ -391,20 +492,23 @@ public class UploadFoolproofToDb
     }
 
     /// <summary>
-    /// Gets the column number (1-based) of an Excel alpha-column index (e.g. ...Y=25, Z=26, AA=27, AB=28)
-    /// It's just base 26 plus 1 represented by letters instead of numbers
+    /// Gets the column number (0-based) of an Excel alpha-column index (e.g. ...Y=25, Z=26, AA=27, AB=28)
+    /// Returns -1 in the case of the empty string
     /// </summary>
+    /// <remarks>
+    /// Excel column enumeration is really just base 26 represented by letters instead of numbers.
+    /// </remarks>
     /// <param name="col">The alpha-column index</param>
-    /// <returns>The number column index</returns>
+    /// <returns>The number column index, or -1 for the empty string</returns>
     private static int ColumnIndex(string col)
     {
         int index = 0;
         foreach (char c in col.ToUpper()) index = index * 26 + c - 'A' + 1;
-        return index;
+        return index-1;
     }
 
     /// <summary>
-    /// Checks the input file's extension to see if it matches one of the Excel formats
+    /// Checks the file extension of <paramref name="path"/> to see if it matches one of the Excel formats
     /// </summary>
     /// <param name="path">The filepath</param>
     /// <returns>Whether <paramref name="path"/> is an Excel file</returns>

@@ -12,7 +12,7 @@ internal static class Config
 
     // Columns to extract sheet-wide info, specified by Excel letter (e.g. "A", "C", "F").
     // Leave the array empty to automatically extract all columns that have data.
-    public static readonly string[] GlobalColumns    = ["AA", "AF", "AM", "AR", "BC"];
+    public static readonly string[] GlobalColumns    = ["AM", "AR", "BC"];
 
     // First row of actual sheet-wide info (1-based). Rows above this are ignored.
     public static readonly int GlobalStartRow    = 4;
