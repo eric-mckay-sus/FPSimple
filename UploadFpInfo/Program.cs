@@ -127,12 +127,14 @@ public class UploadFoolproofToDb
         // Initialize flags for file processing loop
         bool hasDuplicate = false;
         bool hasMiscError = false;
-        bool applyAnotherFilter;
+        bool applyAnotherFilter = false;
 
         do
         {
             // Get and validate a model to which this file is to be associated
-            Console.WriteLine($"Please enter the C. Core model name for the contents of {Path.GetFileName(excelPath)} to be imported:");
+            Console.Write($"Please enter the C. Core model name for the contents of ");
+            PrintInColor(Path.GetFileName(excelPath), ConsoleColor.DarkCyan, false);
+            Console.WriteLine(" to be imported:");
             bool isValidModel;
             string model;
             do // Use a do-while loop to get data and try again on failure
@@ -147,7 +149,7 @@ public class UploadFoolproofToDb
                 }
             } while (!isValidModel);
 
-            Console.WriteLine($"Enter target Excel column name from BM to CJ, R to re-enter model name, or just ENTER to proceed without a filter:");
+            Console.WriteLine($"Enter target Excel column name from BM to CJ, or just ENTER to proceed without a filter:");
 
             bool isFiltering;
             int targetColIndex;
@@ -240,9 +242,12 @@ public class UploadFoolproofToDb
             // Report parse success/failure
             ShowPreview(dt, rowsProcessed);
 
-            Console.Write($"\nWould you like to apply another filter to this same file? (y/n): ");
-            string response = Console.ReadLine()?.Trim().ToLower() ?? "";
-            applyAnotherFilter = response == "y" || response == "yes";
+            if (isFiltering)
+            {
+                Console.Write($"\nWould you like to apply another filter to this same file/reuse this file's contents for another model? (y/n): ");
+                string response = Console.ReadLine()?.Trim().ToLower() ?? "";
+                applyAnotherFilter = response == "y" || response == "yes";
+            }
 
         } while (applyAnotherFilter);
 
@@ -543,10 +548,11 @@ public class UploadFoolproofToDb
     /// </summary>
     /// <param name="msg">The text to be printed</param>
     /// <param name="color">The color in which to print</param>
-    private static void PrintInColor(string msg, ConsoleColor color)
+    private static void PrintInColor(string msg, ConsoleColor color, bool withNewLine=true)
     {
         Console.ForegroundColor = color;
-        Console.WriteLine(msg);
+        if (withNewLine) Console.WriteLine(msg);
+        else Console.Write(msg);
         Console.ResetColor();
     }
 
