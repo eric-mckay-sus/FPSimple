@@ -1,16 +1,31 @@
 ﻿using System.Data;
-using System.Globalization;
-using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using NPOI.HSSF.UserModel;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
+using StringBuilder = System.Text.StringBuilder;
 
+using Util = UploadFpInfo.FPUploadUtilities;
 namespace UploadFpInfo;
 
 public enum ReportLevel{ INFO, IMPORTANT, WARNING, ERROR, SUCCESS }
 
-public record Report(string Message, ReportLevel Level);
+public record Report(string Message, ReportLevel Level=ReportLevel.INFO)
+{
+    public string ToAnsiString()
+    {
+        string colorCode = Level switch
+        {
+            ReportLevel.ERROR     => "\u001b[31m", // Red
+            ReportLevel.SUCCESS   => "\u001b[32m", // Green
+            ReportLevel.WARNING   => "\u001b[33m", // Yellow
+            ReportLevel.IMPORTANT => "\u001b[36m", // Cyan
+            _                     => "\u001b[37m"  // White
+        };
+        const string resetCode = "\u001b[0m";
+        return $"{colorCode}{Message}{resetCode}";
+    }
+}
 
 /// <summary>
 /// Consolidates the parse/upload process for foolproof dummy sample sheets
@@ -18,35 +33,25 @@ public record Report(string Message, ReportLevel Level);
 /// </summary>
 public class FPSheetUploader(IProgress<Report>? progress)
 {
+    // Progress update provider, determines where program output goes
     public IProgress<Report>? Progress = progress;
 
+    // Creates a report and passes it on to the Progress instance
+    private void Report(string msg, ReportLevel level = ReportLevel.INFO) => Progress?.Report(new(msg,level));
+
     /// <summary>
-    /// Main entry point: detect input location argument, initialize Progress to print to console, and
-    /// delegate to file/batch handler based on whether input location is file or folder
+    /// Main entry point: initialize Progress to print to console, instantiate an uploader, then
+    /// delegate the actual ETL process to the uploader
     /// </summary>
     /// <param name="args">Command line arguments, accepts 0-1</param>
     /// <returns></returns>
     public static async Task Main(string[] args)
     {
         // Initialize the progress manager to print to console
-        Progress<Report> consoleProgress = new(report =>
-        {
-            // Map levels to colors
-            Console.ForegroundColor = report.Level switch
-            {
-                ReportLevel.ERROR     => ConsoleColor.Red,
-                ReportLevel.SUCCESS   => ConsoleColor.Green,
-                ReportLevel.WARNING   => ConsoleColor.Yellow,
-                ReportLevel.IMPORTANT => ConsoleColor.DarkCyan,
-                _                     => ConsoleColor.White
-            };
-
-            Console.WriteLine(report.Message);
-            Console.ResetColor();
-        });
+        Progress<Report> consoleProgress = new(report => Console.Write(report.ToAnsiString()));
 
         // If there was an input location argument, pass it along
-        string? potentialFile = null;
+        string potentialFile = "";
         if (args.Length > 0) potentialFile = args[0];
 
         // Exit static by creating an uploader
@@ -56,9 +61,14 @@ public class FPSheetUploader(IProgress<Report>? progress)
         await uploader.ExecuteAsync(potentialFile);
     }
 
-    public async Task ExecuteAsync(string? filename)
+    /// <summary>
+    /// Identifies input location and whether it is a folder/file, then delegates to the batch/file handler
+    /// </summary>
+    /// <param name="filename"></param>
+    /// <returns></returns>
+    public async Task ExecuteAsync(string filename)
     {
-        string path = filename ?? string.Empty;
+        string path = filename;
         bool containsDuplicate = false;
         bool containsMiscError = false;
         string duplicateMessage = "One or more files contain duplicate entries. If you wish to update, please do so manually. Otherwise, no action is required.";
@@ -74,7 +84,7 @@ public class FPSheetUploader(IProgress<Report>? progress)
             {
                 (containsDuplicate, containsMiscError) = await RunBatch(path);
             }
-            else if (File.Exists(path) && IsExcelFile(path))
+            else if (File.Exists(path) && Util.IsExcelFile(path))
             {
                 (containsDuplicate, containsMiscError) = await ProcessFile(path);
             }
@@ -93,7 +103,7 @@ public class FPSheetUploader(IProgress<Report>? progress)
     }
 
     /// <summary>
-    /// Process a batch of FP info files
+    /// Processes a batch of FP info files
     /// </summary>
     /// <returns>An tuple representing whether the batch contains a file that 1) contains PK collision(s) and 2) has a miscellaneous error</returns>
     /// <exception cref="DirectoryNotFoundException">When the input location does not exist</exception>
@@ -112,7 +122,7 @@ public class FPSheetUploader(IProgress<Report>? progress)
             return (false, false);
         }
 
-        Report($"Found {files.Length} files. Starting upload to {Config.DbName}...");
+        Report($"Found {files.Length} files. Starting upload to {Config.DbName}...\n");
 
         bool currentContainsDuplicate = false;
         bool currentContainsMisc = false;
@@ -130,7 +140,7 @@ public class FPSheetUploader(IProgress<Report>? progress)
             }
             catch (Exception ex)
             {
-                Report($"[SKIP] {ex.Message}", ReportLevel.WARNING);
+                Report($"\t[SKIP] {ex.Message}\n", ReportLevel.WARNING);
                 batchContainsMisc=true;
             }
         }
@@ -155,13 +165,13 @@ public class FPSheetUploader(IProgress<Report>? progress)
         }
 
         ISheet sheet = workbook.GetSheetAt(Config.SheetIndex)
-                    ?? throw new Exception($"Sheet index {Config.SheetIndex} not found.");
+                    ?? throw new Exception($"Sheet index {Config.SheetIndex} not found.\n");
 
         // Extract metadata (header row)
         (byte Revision, DateTime IssueDate, string? Issuer) = ParseMetadata(sheet);
 
         // Get column indices associated with column names
-        Dictionary<string, int> colMap = MapHeaderIndices(sheet);
+        Dictionary<string, int> colMap = Util.MapHeaderIndices(sheet);
 
         // Initialize flags for error detection and intention to repeat
         bool hasDuplicate = false;
@@ -171,11 +181,11 @@ public class FPSheetUploader(IProgress<Report>? progress)
         // Start the loop for applying multiple filters (run at least once)
         do
         {
-            (string Model, bool IsFiltering, int targetColIndex) = await CollectUserInput(excelPath);
+            (string Model, bool IsFiltering, int targetColIndex) = await CollectUserInput(Path.GetFileName(excelPath));
             if (Model.Equals("SKIP", StringComparison.OrdinalIgnoreCase)) return (hasDuplicate, hasMiscError);
 
             // Initialize DataTable for rows
-            DataTable dt = CreateFoolproofDataTable();
+            DataTable dt = Util.CreateFoolproofDataTable();
             int rowIndex = Config.DataStartRow - 1;
             int emptyStreak = 0;
             int rowsProcessed = 0;
@@ -184,7 +194,7 @@ public class FPSheetUploader(IProgress<Report>? progress)
             while (rowIndex <= sheet.LastRowNum && emptyStreak < Config.EmptyRowLimit)
             {
                 IRow row = sheet.GetRow(rowIndex);
-                if (IsRowEmpty(row))
+                if (Util.IsRowEmpty(row))
                 {
                     emptyStreak++;
                     rowIndex++;
@@ -193,12 +203,12 @@ public class FPSheetUploader(IProgress<Report>? progress)
 
                 emptyStreak = 0;
 
-                short? dummySampleNum = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
+                short? dummySampleNum = Util.ExtractPartNumber(Util.GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
 
                 bool passesFilter = true; // denotes that the current row either fulfills the filter or there is no filter to fulfill
                 if (IsFiltering)
                 {
-                    string filterCellValue = GetCellText(row, targetColIndex);
+                    string filterCellValue = Util.GetCellText(row, targetColIndex);
                     if (string.IsNullOrWhiteSpace(filterCellValue))
                     {
                         passesFilter = false;
@@ -219,9 +229,9 @@ public class FPSheetUploader(IProgress<Report>? progress)
                         dr["issuer"] = (object?)Issuer ?? DBNull.Value;
 
                         // Get the data for this row
-                        dr["failureMode"] = GetCellText(row, colMap["PROCESS FAILURE MODE"]);
-                        dr["rank"] = GetCellText(row, colMap["RANK"]);
-                        dr["location"] = GetCellText(row, colMap["LOCATION"]);
+                        dr["failureMode"] = Util.GetCellText(row, colMap["PROCESS FAILURE MODE"]).Replace("\n", "");
+                        dr["rank"] = Util.GetCellText(row, colMap["RANK"]);
+                        dr["location"] = Util.GetCellText(row, colMap["LOCATION"]);
                         dr["dummySampleNum"] = dummySampleNum;
 
                         dt.Rows.Add(dr);
@@ -232,13 +242,13 @@ public class FPSheetUploader(IProgress<Report>? progress)
                     catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
                     {
                         if (!hasDuplicate) Report("\n");
-                        Report($"\t[ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {Model} for dummy sample #{dummySampleNum}", ReportLevel.IMPORTANT);
+                        Report($"\t[ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {Model} for dummy sample #{dummySampleNum}\n", ReportLevel.IMPORTANT);
                         hasDuplicate = true;
                     }
                     catch (Exception ex)
                     {
                         if (!hasMiscError) Report("\n");
-                        Report($"\t[ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}", ReportLevel.WARNING);
+                        Report($"\t[ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}\n", ReportLevel.WARNING);
                         hasMiscError = true;
                     }
                 }
@@ -250,7 +260,7 @@ public class FPSheetUploader(IProgress<Report>? progress)
 
             if (IsFiltering)
             {
-                Report($"\nWould you like to apply another filter to this same file/reuse this file's contents for another model? (y/n): ");
+                Report($"\n\tWould you like to apply another filter to this same file/reuse this file's contents for another model? (y/n): ");
                 string response = Console.ReadLine()?.Trim().ToLower() ?? "";
                 applyAnotherFilter = response == "y" || response == "yes";
             }
@@ -260,7 +270,12 @@ public class FPSheetUploader(IProgress<Report>? progress)
         return (hasDuplicate, hasMiscError);
     }
 
-    private async Task<(string, bool, int)> CollectUserInput(string excelPath)
+    /// <summary>
+    /// Asks the user for C. Core model (mandatory) and column filter (optional), looping until valid input is provided
+    /// </summary>
+    /// <param name="filename">The name of the file provided by the user</param>
+    /// <returns>A tuple representing the model, whether there is a filter, and the target column number</returns>
+    private async Task<(string, bool, int)> CollectUserInput(string filename)
     {
         string model;
         bool isFiltering = false;
@@ -269,9 +284,7 @@ public class FPSheetUploader(IProgress<Report>? progress)
         // Get and validate a model to which this file is to be associated
         while (true)
         {
-            Report($"Please enter the C. Core model name for the contents of ");
-            Report(Path.GetFileName(excelPath), ReportLevel.IMPORTANT);
-            Report(" to be imported (or type 'SKIP' to proceed to the next file):\n");
+            Report($"{new Report(filename, ReportLevel.IMPORTANT).ToAnsiString()}: Please enter the C. Core model name for the contents to be imported (or type 'SKIP' to proceed to the next file):\n\t");
 
             bool isValidModel;
             do // Use a do-while loop to get model data and try again on failure
@@ -279,15 +292,15 @@ public class FPSheetUploader(IProgress<Report>? progress)
                 model = Console.ReadLine()?.Trim() ?? string.Empty;
                 if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
                 {
-                    Report($"Skipping file: {Path.GetFileName(excelPath)}", ReportLevel.WARNING);
+                    Report($"\tSkipping file: {filename}\n", ReportLevel.WARNING);
                     return (model, isFiltering, targetColIndex);
                 }
                 isValidModel = await ValidateModel(model);
                 if (!isValidModel)
-                    Report($"{model} is not a model in the model to line database. Please enter a different model name (or 'SKIP'):\n", ReportLevel.WARNING);
+                    Report($"\t{model} is not a model in the model to line database. Please enter a different model name (or 'SKIP'):\n\t", ReportLevel.WARNING);
             } while (!isValidModel);
 
-            Report($"Enter target Excel column name from BM to CJ, 'R' to re-enter model name, or just ENTER to proceed without a filter:\n");
+            Report($"\tEnter target Excel column name from BM to CJ, 'R' to re-enter model name, or just ENTER to proceed without a filter:\n\t");
             bool restartRequested = false;
 
             do
@@ -295,18 +308,18 @@ public class FPSheetUploader(IProgress<Report>? progress)
                 string filterColumnName = Console.ReadLine()?.Trim() ?? string.Empty;
                 if (filterColumnName.Equals("R", StringComparison.OrdinalIgnoreCase))
                 {
-                    Report("Returning to model specification for this file...\n", ReportLevel.IMPORTANT);
+                    Report("\tReturning to model specification for this file...\n");
                     restartRequested = true; // Throw flag so outer loop knows to try again
                     break; // Only breaks the inner loop
                 }
 
-                targetColIndex = ColumnIndex(filterColumnName);
+                targetColIndex = Util.ColumnIndex(filterColumnName);
                 isFiltering = true;
 
                 if(targetColIndex < 64 || targetColIndex > 87)
                 {
                     if (targetColIndex != -1) {
-                        Report($"{filterColumnName} is outside the valid range. Please enter a column name from BM-CJ, 'R' to re-enter model name, or ENTER to add no filter):\n", ReportLevel.WARNING);
+                        Report($"\t{filterColumnName} is outside the valid range. Please enter a column name from BM-CJ, 'R' to re-enter model name, or ENTER to add no filter):\n\t", ReportLevel.WARNING);
                     }
                     isFiltering = false;
                 }
@@ -325,32 +338,32 @@ public class FPSheetUploader(IProgress<Report>? progress)
     /// <param name="rowsProcessed">The number of rows processed</param>
     public void ShowPreview(DataTable dt, int rowsProcessed)
     {
-        // If there's nothing to print to, skip the preview entirely
+        // If there's no output defined, skip the preview entirely
         if (Progress==null) return;
 
-        System.Text.StringBuilder sb = new();
-
+        // If there's no content to print, tell the user and exit
         if(rowsProcessed == 0){
-            Report("No rows with valid data (under current filters).", ReportLevel.WARNING);
+            Report("\tNo rows with valid data (under current filters).", ReportLevel.WARNING);
             return;
         }
 
-        Report("\n");
-        Report($"--- UPLOAD SUMMARY: {rowsProcessed} ROWS PROCESSED ---", ReportLevel.SUCCESS);
+        StringBuilder sb = new();
+
+        sb.Append(new Report($"\t--- UPLOAD SUMMARY: {rowsProcessed} ROWS PROCESSED ---\n\t", ReportLevel.SUCCESS).ToAnsiString());
 
         // Define column widths for the ASCII table
         int modelWidth = 15;
-        int modeWidth = 30;
+        int modeWidth = 45;
         int locWidth = 15;
-        int dummyWidth = 10;
+        int dummyWidth = 5;
 
         // Print table header
-        string header = $"| {"Model".PadRight(modelWidth)} | {"Failure Mode".PadRight(modeWidth)} | {"Loc".PadRight(locWidth)} | {"Dummy #".PadRight(dummyWidth)} |";
-        string divider = new('-', header.Length);
+        string header = $"| {"Model".PadRight(modelWidth)} | {"Failure Mode".PadRight(modeWidth)} | {"Loc".PadRight(locWidth)} | {"Dummy #".PadRight(dummyWidth)} |\n\t";
+        string divider = $"{new('-', header.Length)}\n\t";
 
-        Report(divider);
-        Report(header);
-        Report(divider);
+        sb.Append(divider);
+        sb.Append(header);
+        sb.Append(divider);
 
         // Print each row from the DataTable
         foreach (DataRow row in dt.Rows)
@@ -369,10 +382,13 @@ public class FPSheetUploader(IProgress<Report>? progress)
 
             string dummyStr = row["dummySampleNum"]?.ToString() ?? "";
 
-            Report($"| {modelStr.PadRight(modelWidth)} | {modeStr.PadRight(modeWidth)} | {locStr.PadRight(locWidth)} | {dummyStr.PadRight(dummyWidth)} |");
+            string line = $"| {modelStr.PadRight(modelWidth)} | {modeStr.PadRight(modeWidth)} | {locStr.PadRight(locWidth)} | {dummyStr.PadRight(dummyWidth)} |\n\t";
+            sb.Append(new Report(line).ToAnsiString());
         }
 
-        Report(divider);
+        sb.Append(divider.TrimEnd('\t'));
+
+        Progress.Report(new(sb.ToString()));
     }
 
     /// <summary>
@@ -407,13 +423,13 @@ public class FPSheetUploader(IProgress<Report>? progress)
     private static (byte Revision, DateTime IssueDate, string Issuer) ParseMetadata(ISheet sheet)
     {
         IRow dataRow = sheet.GetRow(Config.GlobalStartRow - 1);
-        int[] metadataIndices = Config.GlobalColumns.Select(ColumnIndex).ToArray();
+        int[] metadataIndices = Config.GlobalColumns.Select(Util.ColumnIndex).ToArray();
 
-        string revRaw = GetCellText(dataRow, metadataIndices[0]);
-        string dateRaw = GetCellText(dataRow, metadataIndices[1]);
-        string issuer = GetCellText(dataRow, metadataIndices[2]);
+        string revRaw = Util.GetCellText(dataRow, metadataIndices[0]);
+        string dateRaw = Util.GetCellText(dataRow, metadataIndices[1]);
+        string issuer = Util.GetCellText(dataRow, metadataIndices[2]);
 
-        byte revision = TranslateRevString(revRaw);
+        byte revision = Util.TranslateRevString(revRaw);
 
         // Clean common Excel date string artifacts
         string cleanDate = dateRaw.Replace("th", "", StringComparison.OrdinalIgnoreCase)
@@ -425,51 +441,6 @@ public class FPSheetUploader(IProgress<Report>? progress)
             issueDate = DateTime.MinValue;
 
         return (revision, issueDate, issuer);
-    }
-
-    /// <summary>
-    /// Creates a dictionary mapping header names to indices
-    /// </summary>
-    /// <param name="sheet">The sheet in which the headers reside</param>
-    /// <returns>The dictionary mapping header names to header indices</returns>
-    private static Dictionary<string, int> MapHeaderIndices(ISheet sheet)
-    {
-        Dictionary<string, int> map = new(StringComparer.OrdinalIgnoreCase);
-        IRow headerRow = sheet.GetRow(Config.DataHeaderRow - 1);
-
-        // Required target columns
-        string[] targets = ["PROCESS FAILURE MODE", "RANK", "LOCATION", "DUMMY SAMPLE REQUIRED?"];
-        foreach (string t in targets) map[t] = -1;
-
-        for (int i = 0; i < headerRow.LastCellNum; i++)
-        {
-            string val = GetCellText(headerRow, i).ToUpper().Trim();
-            if (map.ContainsKey(val)) map[val] = i;
-        }
-
-        return map;
-    }
-
-    /// <summary>
-    /// Get the part master number from an input string
-    /// First tries to get a numeric value after the # character, but falls back to any number in the input
-    /// If neither work, defaults to null (to denote this entry is irrelvant from a label-making standpoint)
-    /// </summary>
-    /// <param name="raw">The string to check for part master number</param>
-    /// <returns>The part master number as a short, or DBNull if one does not exist</returns>
-    private static short? ExtractPartNumber(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return null;
-
-        Match match = Regex.Match(raw, @"#(\d+)");
-        if (match.Success && short.TryParse(match.Groups[1].Value, out short result))
-            return result;
-
-        string digits = new(raw.Where(char.IsDigit).ToArray());
-        if (!string.IsNullOrEmpty(digits) && short.TryParse(digits, out short fallback))
-            return fallback;
-
-        return null;
     }
 
     /// <summary>
@@ -502,121 +473,4 @@ public class FPSheetUploader(IProgress<Report>? progress)
 
         await cmd.ExecuteNonQueryAsync();
     }
-
-    /// <summary>
-    /// Translates the string with revision number info, handling standard aliases
-    /// and clipping REV or R to return just the numeric data
-    /// </summary>
-    /// <param name="rev">The string containing revision information</param>
-    /// <returns>A byte representation of the revision number</returns>
-    private static byte TranslateRevString(string rev)
-    {
-        rev = rev.ToUpper();
-        if (rev == "ORIG" || rev == "DRAFT") return 0;
-        string clean = Regex.Replace(rev, "[REV|R]", "");
-        return byte.TryParse(clean, out byte result) ? result : (byte)0;
-    }
-
-    /// <summary>
-    /// Constructs a DataTable mappable to the table on SQL Server.
-    /// The MaxLength attribute ensures no columns overflow before the server is contacted.
-    /// </summary>
-    /// <returns>A datatable compliant with the column names and datatypes in the FP table</returns>
-    private static DataTable CreateFoolproofDataTable()
-    {
-        DataSet ds = new();
-        DataTable dt = ds.Tables.Add("FoolproofInfo");
-        dt.Columns.Add("model", typeof(string)).MaxLength = 32;
-        dt.Columns.Add("revision", typeof(byte));
-        dt.Columns.Add("issueDate", typeof(DateTime));
-        dt.Columns.Add("issuer", typeof(string)).MaxLength = 32;
-        dt.Columns.Add("failureMode", typeof(string)).MaxLength = 100;
-        dt.Columns.Add("rank", typeof(string)).MaxLength = 1;
-        dt.Columns.Add("location", typeof(string)).MaxLength = 32;
-        dt.Columns.Add("dummySampleNum", typeof(short));
-
-        ds.EnforceConstraints = true;
-        return dt;
-    }
-
-    /// <summary>
-    /// Locates and reads the text of a cell with the specified row-col 'coordinates'
-    /// </summary>
-    /// <param name="row">The row object containing the desired data (and providing the y-coordinate)</param>
-    /// <param name="colIndex">The x-coordinate of the data to get</param>
-    /// <returns>A string of the text in the target cell</returns>
-    private static string GetCellText(IRow? row, int colIndex)
-    {
-        if (row == null || colIndex < 0) return "";
-        ICell cell = row.GetCell(colIndex);
-        if (cell == null) return "";
-
-        if (cell.CellType == CellType.Formula)
-            return ResolveCellText(cell, cell.CachedFormulaResultType);
-
-        return ResolveCellText(cell, cell.CellType);
-    }
-
-    /// <summary>
-    /// Reads the data inside a cell object based on its type
-    /// </summary>
-    /// <param name="cell">The cell object to read</param>
-    /// <param name="type">The datatype in the cell</param>
-    /// <returns>A string representation of the data in the specified cell</returns>
-    private static string ResolveCellText(ICell cell, CellType type)
-    {
-        return type switch
-        {
-            CellType.Numeric => DateUtil.IsCellDateFormatted(cell)
-                                ? cell.DateCellValue?.ToString("yyyy-MM-dd") ?? ""
-                                : cell.NumericCellValue.ToString(CultureInfo.InvariantCulture),
-            CellType.Boolean => cell.BooleanCellValue.ToString(),
-            CellType.String => cell.StringCellValue ?? "",
-            _ => ""
-        };
-    }
-
-    /// <summary>
-    /// Verifies whether a row is empty
-    /// </summary>
-    /// <param name="row">The row for which to check the contents</param>
-    /// <returns>Whether the row is empty</returns>
-    private static bool IsRowEmpty(IRow? row)
-    {
-        if (row == null) return true;
-        return row.Cells.All(c => string.IsNullOrWhiteSpace(ResolveCellText(c, c.CellType == CellType.Formula ? c.CachedFormulaResultType : c.CellType)));
-    }
-
-    /// <summary>
-    /// Gets the column number (0-based) of an Excel alpha-column index (e.g. ...Y=25, Z=26, AA=27, AB=28)
-    /// Returns -1 in the case of the empty string
-    /// </summary>
-    /// <remarks>
-    /// Excel column enumeration is really just base 26 represented by letters instead of numbers.
-    /// </remarks>
-    /// <param name="col">The alpha-column index</param>
-    /// <returns>The number column index, or -1 for the empty string</returns>
-    private static int ColumnIndex(string col)
-    {
-        int index = 0;
-        foreach (char c in col.ToUpper()) index = index * 26 + c - 'A' + 1;
-        return index-1;
-    }
-
-    /// <summary>
-    /// Checks the file extension of <paramref name="path"/> to see if it matches one of the Excel formats
-    /// </summary>
-    /// <param name="path">The filepath</param>
-    /// <returns>Whether <paramref name="path"/> is an Excel file</returns>
-    private static bool IsExcelFile(string path) =>
-        path.EndsWith(".xls", StringComparison.OrdinalIgnoreCase) ||
-        path.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Updates the progress monitor with a new message and 'level'
-    /// The message level is just metadata to be handled by the receiver
-    /// </summary>
-    /// <param name="msg">The message to report</param>
-    /// <param name="level">The report level</param>
-    private void Report(string msg, ReportLevel level = ReportLevel.INFO) => Progress?.Report(new(msg,level));
 }
