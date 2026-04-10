@@ -3,72 +3,72 @@ using Microsoft.Data.SqlClient;
 using NPOI.HSSF.UserModel;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
-using StringBuilder = System.Text.StringBuilder;
 
 using Util = UploadFpInfo.FPUploadUtilities;
 namespace UploadFpInfo;
-
-public enum ReportLevel{ INFO, IMPORTANT, WARNING, ERROR, SUCCESS }
-
-public record Report(string Message, ReportLevel Level=ReportLevel.INFO)
-{
-    public string ToAnsiString()
-    {
-        string colorCode = Level switch
-        {
-            ReportLevel.ERROR     => "\u001b[31m", // Red
-            ReportLevel.SUCCESS   => "\u001b[32m", // Green
-            ReportLevel.WARNING   => "\u001b[33m", // Yellow
-            ReportLevel.IMPORTANT => "\u001b[36m", // Cyan
-            _                     => "\u001b[37m"  // White
-        };
-        const string resetCode = "\u001b[0m";
-        return $"{colorCode}{Message}{resetCode}";
-    }
-}
 
 /// <summary>
 /// Consolidates the parse/upload process for foolproof dummy sample sheets
 /// The model to line database must be populated for insertion validation to succeed
 /// </summary>
-public class FPSheetUploader(IProgress<Report>? progress)
+public class FPSheetUploader
 {
-    // Progress update provider, determines where program output goes
-    public IProgress<Report>? Progress = progress;
+    // Determines where user input comes from
+    public IInputProvider Input;
 
-    // Creates a report and passes it on to the Progress instance
-    private void Report(string msg, ReportLevel level = ReportLevel.INFO) => Progress?.Report(new(msg,level));
+    // Determines where/how program output is displayed
+    public IReportOutputProvider Output;
 
     /// <summary>
-    /// Main entry point: initialize Progress to print to console, instantiate an uploader, then
-    /// delegate the actual ETL process to the uploader
+    /// The default constructor. Uses console for both input and output
     /// </summary>
-    /// <param name="args">Command line arguments, accepts 0-1</param>
+    public FPSheetUploader()
+    {
+        Input = new ConsoleInputProvider();
+        Output = new ConsoleReporter();
+    }
+
+    public FPSheetUploader(IInputProvider inputProvider, IReportOutputProvider outputProvider)
+    {
+        Input = inputProvider;
+        Output = outputProvider;
+    }
+
+    // Creates a report and passes it on to the Progress instance
+    private async Task Report(string msg, ReportLevel level = ReportLevel.INFO) => await Output.ReportAsync(new(msg,level));
+
+    /// <summary>
+    /// Main entry point: Instantiate an uploader using the default constructor to
+    /// print to the console, then delegate the actual ETL process to the uploader
+    /// </summary>
+    /// <param name="args">Command line arguments, accepts an optional file path</param>
     /// <returns></returns>
     public static async Task Main(string[] args)
     {
-        // Initialize the progress manager to print to console
-        Progress<Report> consoleProgress = new(report => Console.Write(report.ToAnsiString()));
-
         // If there was an input location argument, pass it along
-        string potentialFile = "";
+        string? potentialFile = null;
         if (args.Length > 0) potentialFile = args[0];
 
         // Exit static by creating an uploader
-        FPSheetUploader uploader = new(consoleProgress);
+        FPSheetUploader uploader = new();
 
         // Defaults to the input location in config
         await uploader.ExecuteAsync(potentialFile);
     }
 
     /// <summary>
-    /// Identifies input location and whether it is a folder/file, then delegates to the batch/file handler
+    /// Identifies input location and whether it is a folder/file, then delegates to the batch/file handler.
+    /// Recommended entry point for other programs which use this one.
     /// </summary>
-    /// <param name="filename"></param>
+    /// <param name="filename">An optional file path to override the one found in config</param>
     /// <returns></returns>
-    public async Task ExecuteAsync(string filename)
+    public async Task ExecuteAsync(string? filename=null)
     {
-        string path = filename;
+        // Need to perform this check again because
+        string path = Config.InputLocation;
+        if (string.IsNullOrWhiteSpace(filename)) await Report($"No file argument detected. Defaulting to config file input location ({Config.InputLocation})\n");
+        else path = filename;
+
         bool containsDuplicate = false;
         bool containsMiscError = false;
         string duplicateMessage = "One or more files contain duplicate entries. If you wish to update, please do so manually. Otherwise, no action is required.";
@@ -78,7 +78,7 @@ public class FPSheetUploader(IProgress<Report>? progress)
         {
             if (!Path.Exists(path))
             {
-                Report($"Path '{path}' is not a valid directory or Excel file. Using Config default ({Config.InputLocation}).\n", ReportLevel.WARNING);
+                await Report($"Path '{path}' is not a valid directory or Excel file. Using Config default ({Config.InputLocation}).\n", ReportLevel.WARNING);
             }
             else if (Directory.Exists(path))
             {
@@ -90,15 +90,15 @@ public class FPSheetUploader(IProgress<Report>? progress)
             }
             else
             {
-                Report($"Could not find {path}. Please verify the path is correct, then try again.");
+                await Report($"Could not find {path}. Please verify the path is correct, then try again.");
             }
 
-            if (containsDuplicate) Report(duplicateMessage, ReportLevel.IMPORTANT);
-            if (containsMiscError) Report(miscErrorMessage, ReportLevel.WARNING);
+            if (containsDuplicate) await Report(duplicateMessage, ReportLevel.IMPORTANT);
+            if (containsMiscError) await Report(miscErrorMessage, ReportLevel.WARNING);
         }
         catch (Exception ex)
         {
-            Report($"Fatal error: {ex.Message}", ReportLevel.ERROR);
+            await Report($"Fatal error: {ex.Message}", ReportLevel.ERROR);
         }
     }
 
@@ -106,7 +106,6 @@ public class FPSheetUploader(IProgress<Report>? progress)
     /// Processes a batch of FP info files
     /// </summary>
     /// <returns>An tuple representing whether the batch contains a file that 1) contains PK collision(s) and 2) has a miscellaneous error</returns>
-    /// <exception cref="DirectoryNotFoundException">When the input location does not exist</exception>
     private async Task<(bool, bool)> RunBatch(string directoryPath)
     {
         DirectoryInfo inputDir = new(directoryPath);
@@ -118,11 +117,11 @@ public class FPSheetUploader(IProgress<Report>? progress)
 
         if (files.Length == 0)
         {
-            Report("No Excel files found.", ReportLevel.ERROR);
+            await Report("No Excel files found.", ReportLevel.ERROR);
             return (false, false);
         }
 
-        Report($"Found {files.Length} files. Starting upload to {Config.DbName}...\n");
+        await Report($"Found {files.Length} files. Starting upload to {Config.DbName}...\n");
 
         bool currentContainsDuplicate = false;
         bool currentContainsMisc = false;
@@ -140,7 +139,7 @@ public class FPSheetUploader(IProgress<Report>? progress)
             }
             catch (Exception ex)
             {
-                Report($"\t[SKIP] {ex.Message}\n", ReportLevel.WARNING);
+                await Report($"\t[SKIP] {ex.Message}\n", ReportLevel.WARNING);
                 batchContainsMisc=true;
             }
         }
@@ -155,17 +154,14 @@ public class FPSheetUploader(IProgress<Report>? progress)
     /// <exception cref="Exception">When the file does not have a sheet at the specified index</exception>
     private async Task<(bool, bool)> ProcessFile(string excelPath)
     {
-        // Load Excel file
-        IWorkbook workbook;
+        // Load Excel file, grab the sheet, then close the Excel file
+        ISheet sheet;
         using (FileStream fs = new(excelPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (IWorkbook workbook = excelPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ? new XSSFWorkbook(fs) : new HSSFWorkbook(fs))
         {
-            workbook = excelPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)
-                ? new XSSFWorkbook(fs)
-                : new HSSFWorkbook(fs);
-        }
-
-        ISheet sheet = workbook.GetSheetAt(Config.SheetIndex)
+            sheet = workbook.GetSheetAt(Config.SheetIndex)
                     ?? throw new Exception($"Sheet index {Config.SheetIndex} not found.\n");
+        }
 
         // Extract metadata (header row)
         (byte Revision, DateTime IssueDate, string? Issuer) = ParseMetadata(sheet);
@@ -177,18 +173,23 @@ public class FPSheetUploader(IProgress<Report>? progress)
         bool hasDuplicate = false;
         bool hasMiscError = false;
         bool applyAnotherFilter = false;
+        bool isNewFile = true;
+
+        // One DB connection to be used across all rows of this file
+        using SqlConnection conn = new(Config.GetConnectionString());
+        await conn.OpenAsync();
 
         // Start the loop for applying multiple filters (run at least once)
         do
         {
-            (string Model, bool IsFiltering, int targetColIndex) = await CollectUserInput(Path.GetFileName(excelPath));
+            (string Model, bool IsFiltering, int targetColIndex) = await CollectUserInput(Path.GetFileName(excelPath), isNewFile);
             if (Model.Equals("SKIP", StringComparison.OrdinalIgnoreCase)) return (hasDuplicate, hasMiscError);
+            else isNewFile = true; // For the next iteration
 
             // Initialize DataTable for rows
             DataTable dt = Util.CreateFoolproofDataTable();
             int rowIndex = Config.DataStartRow - 1;
             int emptyStreak = 0;
-            int rowsProcessed = 0;
 
             // Loop through each row in the file, or until we've seen a certain number of empty rows
             while (rowIndex <= sheet.LastRowNum && emptyStreak < Config.EmptyRowLimit)
@@ -235,20 +236,19 @@ public class FPSheetUploader(IProgress<Report>? progress)
                         dr["dummySampleNum"] = dummySampleNum;
 
                         dt.Rows.Add(dr);
-                        await WriteRowToDatabase(dr);
-                        rowsProcessed++;
+                        await WriteRowToDatabase(dr, conn);
 
                     }
                     catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
                     {
-                        if (!hasDuplicate) Report("\n");
-                        Report($"\t[ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {Model} for dummy sample #{dummySampleNum}\n", ReportLevel.IMPORTANT);
+                        if (!hasDuplicate) await Report("\n");
+                        await Report($"\t[ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {Model} for dummy sample #{dummySampleNum}\n", ReportLevel.IMPORTANT);
                         hasDuplicate = true;
                     }
                     catch (Exception ex)
                     {
-                        if (!hasMiscError) Report("\n");
-                        Report($"\t[ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}\n", ReportLevel.WARNING);
+                        if (!hasMiscError) await Report("\n");
+                        await Report($"\t[ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}\n", ReportLevel.WARNING);
                         hasMiscError = true;
                     }
                 }
@@ -256,14 +256,15 @@ public class FPSheetUploader(IProgress<Report>? progress)
             }
 
             // Report parse success/failure
-            if (Progress != null) ShowPreview(dt, rowsProcessed);
+            await Output.ShowPreview(dt);
 
             if (IsFiltering)
             {
-                Report($"\n\tWould you like to apply another filter to this same file/reuse this file's contents for another model? (y/n): ");
-                string response = Console.ReadLine()?.Trim().ToLower() ?? "";
-                applyAnotherFilter = response == "y" || response == "yes";
+                applyAnotherFilter = await Input.GetConfirmAsync(new("\tWould you like to apply another filter/reuse this file for another model?"));
+                isNewFile = !applyAnotherFilter;
             }
+            else
+                applyAnotherFilter = false;
 
         } while (applyAnotherFilter);
 
@@ -274,121 +275,63 @@ public class FPSheetUploader(IProgress<Report>? progress)
     /// Asks the user for C. Core model (mandatory) and column filter (optional), looping until valid input is provided
     /// </summary>
     /// <param name="filename">The name of the file provided by the user</param>
+    /// <param name="lastModel">The most recent model name</param>
     /// <returns>A tuple representing the model, whether there is a filter, and the target column number</returns>
-    private async Task<(string, bool, int)> CollectUserInput(string filename)
+    private async Task<(string, bool, int)> CollectUserInput(string filename, bool isNewModel)
     {
-        string model;
+        string model = string.Empty;
         bool isFiltering = false;
         int targetColIndex = -1;
 
-        // Get and validate a model to which this file is to be associated
+        // This outer loop controls redirects to the model prompt (i.e. bad model name or 'R' in response to the column prompt)
         while (true)
         {
-            Report($"{new Report(filename, ReportLevel.IMPORTANT).ToAnsiString()}: Please enter the C. Core model name for the contents to be imported (or type 'SKIP' to proceed to the next file):\n\t");
+            await Report($"{(isNewModel ? "[NEW]" : "[REPEAT]")} {filename}\n", ReportLevel.IMPORTANT);
+            Report modelPrompt = new("\tPlease enter the C. Core model name for the contents to be imported (or type 'SKIP' to proceed to the next file):");
+            model = (await Input.GetInputAsync(modelPrompt)).Trim();
 
-            bool isValidModel;
-            do // Use a do-while loop to get model data and try again on failure
+            if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
             {
-                model = Console.ReadLine()?.Trim() ?? string.Empty;
-                if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
-                {
-                    Report($"\tSkipping file: {filename}\n", ReportLevel.WARNING);
-                    return (model, isFiltering, targetColIndex);
-                }
-                isValidModel = await ValidateModel(model);
-                if (!isValidModel)
-                    Report($"\t{model} is not a model in the model to line database. Please enter a different model name (or 'SKIP'):\n\t", ReportLevel.WARNING);
-            } while (!isValidModel);
+                await Report($"\tSkipping file: {filename}\n", ReportLevel.WARNING);
+                return (model, isFiltering, targetColIndex);
+            }
 
-            Report($"\tEnter target Excel column name from BM to CJ, 'R' to re-enter model name, or just ENTER to proceed without a filter:\n\t");
-            bool restartRequested = false;
-
-            do
+            if (!await ValidateModel(model))
             {
-                string filterColumnName = Console.ReadLine()?.Trim() ?? string.Empty;
+                await Report($"\t{model} is not in the model to line database. Please try again.\n", ReportLevel.WARNING);
+                isNewModel = false;
+                continue;
+            }
+
+            // This inner loop controls redirects to the column prompt (i.e. bad column )
+            while (true)
+            {
+                string colPrompt = $"\t[{model}] Enter Excel column name (BM-CJ), 'R' to change model, or ENTER for no filter:";
+                string filterColumnName = (await Input.GetInputAsync(new(colPrompt))).Trim();
+
                 if (filterColumnName.Equals("R", StringComparison.OrdinalIgnoreCase))
-                {
-                    Report("\tReturning to model specification for this file...\n");
-                    restartRequested = true; // Throw flag so outer loop knows to try again
-                    break; // Only breaks the inner loop
+                { // Signal that this is a repeat, then repeat by breaking the inner loop, redirecting to outer loop
+                    isNewModel = false;
+                    break;
                 }
 
                 targetColIndex = Util.ColumnIndex(filterColumnName);
-                isFiltering = true;
 
-                if(targetColIndex < 64 || targetColIndex > 87)
+                if (string.IsNullOrEmpty(filterColumnName))
                 {
-                    if (targetColIndex != -1) {
-                        Report($"\t{filterColumnName} is outside the valid range. Please enter a column name from BM-CJ, 'R' to re-enter model name, or ENTER to add no filter):\n\t", ReportLevel.WARNING);
-                    }
                     isFiltering = false;
+                    return (model, isFiltering, -1);
                 }
-            } while(!(targetColIndex == -1 || isFiltering));
 
-            // Exit the loop if if
-            if (!restartRequested) break;
+                if (targetColIndex >= 64 && targetColIndex <= 87)
+                {
+                    isFiltering = true;
+                    return (model, isFiltering, targetColIndex);
+                }
+
+                await Report($"\t{filterColumnName} is out of range. Please try again.\n", ReportLevel.WARNING);
+            }
         }
-        return (model, isFiltering, targetColIndex);
-    }
-
-    /// <summary>
-    /// Prints the contents of <paramref name="dt"/> to the console
-    /// </summary>
-    /// <param name="dt">The DataTable to display</param>
-    /// <param name="rowsProcessed">The number of rows processed</param>
-    public void ShowPreview(DataTable dt, int rowsProcessed)
-    {
-        // If there's no output defined, skip the preview entirely
-        if (Progress==null) return;
-
-        // If there's no content to print, tell the user and exit
-        if(rowsProcessed == 0){
-            Report("\tNo rows with valid data (under current filters).", ReportLevel.WARNING);
-            return;
-        }
-
-        StringBuilder sb = new();
-
-        sb.Append(new Report($"\t--- UPLOAD SUMMARY: {rowsProcessed} ROWS PROCESSED ---\n\t", ReportLevel.SUCCESS).ToAnsiString());
-
-        // Define column widths for the ASCII table
-        int modelWidth = 15;
-        int modeWidth = 45;
-        int locWidth = 15;
-        int dummyWidth = 5;
-
-        // Print table header
-        string header = $"| {"Model".PadRight(modelWidth)} | {"Failure Mode".PadRight(modeWidth)} | {"Loc".PadRight(locWidth)} | {"Dummy #".PadRight(dummyWidth)} |\n\t";
-        string divider = $"{new('-', header.Length)}\n\t";
-
-        sb.Append(divider);
-        sb.Append(header);
-        sb.Append(divider);
-
-        // Print each row from the DataTable
-        foreach (DataRow row in dt.Rows)
-        {
-            string modelStr = row["model"]?.ToString()?.Length > modelWidth
-                ? string.Concat(row["model"].ToString().AsSpan(0, modelWidth - 3), "...")
-                : row["model"]?.ToString() ?? "";
-
-            string modeStr = row["failureMode"]?.ToString()?.Length > modeWidth
-                ? string.Concat(row["failureMode"].ToString().AsSpan(0, modeWidth - 3), "...")
-                : row["failureMode"]?.ToString() ?? "";
-
-            string locStr = row["location"]?.ToString()?.Length > locWidth
-                ? string.Concat(row["location"].ToString().AsSpan(0, locWidth - 3), "...")
-                : row["location"]?.ToString() ?? "";
-
-            string dummyStr = row["dummySampleNum"]?.ToString() ?? "";
-
-            string line = $"| {modelStr.PadRight(modelWidth)} | {modeStr.PadRight(modeWidth)} | {locStr.PadRight(locWidth)} | {dummyStr.PadRight(dummyWidth)} |\n\t";
-            sb.Append(new Report(line).ToAnsiString());
-        }
-
-        sb.Append(divider.TrimEnd('\t'));
-
-        Progress.Report(new(sb.ToString()));
     }
 
     /// <summary>
@@ -448,11 +391,8 @@ public class FPSheetUploader(IProgress<Report>? progress)
     /// </summary>
     /// <param name="dr">The DataRow whose contents will be written to the server</param>
     /// <returns></returns>
-    private static async Task WriteRowToDatabase(DataRow dr)
+    private static async Task WriteRowToDatabase(DataRow dr, SqlConnection conn)
     {
-        using SqlConnection conn = new(Config.GetConnectionString());
-        await conn.OpenAsync();
-
         string sql = @"
             INSERT INTO dbo.FoolproofInfo
             (model, revision, issueDate, issuer, failureMode, rank, location, dummySampleNum)

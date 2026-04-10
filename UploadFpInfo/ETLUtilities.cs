@@ -8,7 +8,7 @@ namespace UploadFpInfo;
 public static class FPUploadUtilities
 {
     /// <summary>
-    /// Creates a dictionary mapping header names to indices
+    /// Dynamically maps header names to indices (reads all entries in header row)
     /// </summary>
     /// <param name="sheet">The sheet in which the headers reside</param>
     /// <returns>The dictionary mapping header names to header indices</returns>
@@ -18,7 +18,7 @@ public static class FPUploadUtilities
         IRow headerRow = sheet.GetRow(Config.DataHeaderRow - 1);
 
         // Required target columns
-        string[] targets = ["PROCESS FAILURE MODE", "RANK", "LOCATION", "DUMMY SAMPLE REQUIRED?"];
+        string[] targets = Config.DataHeaderNames;
         foreach (string t in targets) map[t] = -1;
 
         for (int i = 0; i < headerRow.LastCellNum; i++)
