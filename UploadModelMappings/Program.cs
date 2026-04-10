@@ -10,19 +10,19 @@ namespace UploadModelMappings;
 public record ModelInfo
 {
     [Name("INTERNAL_PART_#")]
-    public string IcsNum { get; set; }
+    public required string IcsNum { get; set; }
 
     [Name("SHORT_DESC")]
-    public string ShortDescription { get; set; }
+    public required string ShortDescription { get; set; }
 
     [Name("PROD_CELL_CODE")]
-    public string ProdCellCode { get; set; }
+    public required string ProdCellCode { get; set; }
 
     [Name("WORK_CENTER_CODE")]
-    public string WorkCenterCode { get; set; }
+    public required string WorkCenterCode { get; set; }
 
     [Name("DESCRIPTION")]
-    public string Description { get; set; }
+    public required string Description { get; set; }
 }
 
 public sealed class ModelInfoMap : ClassMap<ModelInfo>
@@ -80,7 +80,9 @@ public class UploadModelsToDb
 
         Console.WriteLine($"WARNING: If successful, this action will overwrite the current model info database with the contents of {file}. Proceed? (y/n)");
 
-        if (!Console.ReadLine().Equals("y", StringComparison.OrdinalIgnoreCase)) return; // default to cancel if user does not input y or Y
+        string userConfirmation = Console.ReadLine() ?? string.Empty;
+
+        if (!userConfirmation.Equals("y", StringComparison.OrdinalIgnoreCase)) return; // default to cancel if user does not input y or Y
 
         var consoleProgress = new Progress<string>(msg => Console.Write(msg));
         await Upload(file, builder.ConnectionString, consoleProgress);
