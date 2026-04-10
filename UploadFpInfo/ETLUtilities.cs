@@ -5,8 +5,14 @@ using System.Text.RegularExpressions;
 
 namespace UploadFpInfo;
 
-public static class FPUploadUtilities
+public static partial class FPUploadUtilities
 {
+    // Generating the regular expressions at compile-time expedites the match
+    [GeneratedRegex(@"#(\d+)")]
+    private static partial Regex DummySampleExtractor();
+    [GeneratedRegex("[REV|R]")]
+    private static partial Regex RevisionNumberCleaner();
+
     /// <summary>
     /// Dynamically maps header names to indices (reads all entries in header row)
     /// </summary>
@@ -41,7 +47,7 @@ public static class FPUploadUtilities
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
 
-        Match match = Regex.Match(raw, @"#(\d+)");
+        Match match = DummySampleExtractor().Match(raw);
         if (match.Success && short.TryParse(match.Groups[1].Value, out short result))
             return result;
 
@@ -62,7 +68,7 @@ public static class FPUploadUtilities
     {
         rev = rev.ToUpper();
         if (rev == "ORIG" || rev == "DRAFT") return 0;
-        string clean = Regex.Replace(rev, "[REV|R]", "");
+        string clean = RevisionNumberCleaner().Replace(rev, "");
         return byte.TryParse(clean, out byte result) ? result : (byte)0;
     }
 
@@ -85,6 +91,39 @@ public static class FPUploadUtilities
         dt.Columns.Add("dummySampleNum", typeof(short));
 
         ds.EnforceConstraints = true;
+        return dt;
+    }
+
+    public static DataTable BuildDataTableFromSheet(ISheet sheet, string model, byte revision, DateTime issueDate, string? issuer, Dictionary<string, int> colMap, bool isFiltering, int targetColIndex)
+    {
+        DataTable dt = CreateFoolproofDataTable();
+        int rowIndex = Config.DataStartRow - 1;
+        int emptyStreak = 0;
+
+        while (rowIndex <= sheet.LastRowNum && emptyStreak < Config.EmptyRowLimit)
+        {
+            IRow row = sheet.GetRow(rowIndex);
+            if (IsRowEmpty(row)) { emptyStreak++; rowIndex++; continue; }
+            emptyStreak = 0;
+
+            short? dummySampleNum = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
+            bool passesFilter = !isFiltering || !string.IsNullOrWhiteSpace(GetCellText(row, targetColIndex));
+
+            if (dummySampleNum != null && passesFilter)
+            {
+                DataRow dr = dt.NewRow();
+                dr["model"] = model;
+                dr["revision"] = revision;
+                dr["issueDate"] = issueDate;
+                dr["issuer"] = (object?)issuer ?? DBNull.Value;
+                dr["failureMode"] = GetCellText(row, colMap["PROCESS FAILURE MODE"]).Replace("\n", "");
+                dr["rank"] = GetCellText(row, colMap["RANK"]);
+                dr["location"] = GetCellText(row, colMap["LOCATION"]);
+                dr["dummySampleNum"] = dummySampleNum;
+                dt.Rows.Add(dr);
+            }
+            rowIndex++;
+        }
         return dt;
     }
 

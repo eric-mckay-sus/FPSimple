@@ -111,8 +111,7 @@ public class ConsoleReporter : IReportOutputProvider
     /// <summary>
     /// Prints the contents of <paramref name="dt"/> to the console
     /// </summary>
-    /// <param name="dt">The DataTable to display</param>
-    /// <param name="rowsProcessed">The number of rows processed</param>
+    /// <param name="dt"><inheritdoc/></param>
     public async Task ShowPreview(DataTable dt)
     {
         // If there's no content to print, tell the user and exit

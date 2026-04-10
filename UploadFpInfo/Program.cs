@@ -187,72 +187,45 @@ public class FPSheetUploader
             else isNewFile = true; // For the next iteration
 
             // Initialize DataTable for rows
-            DataTable dt = Util.CreateFoolproofDataTable();
-            int rowIndex = Config.DataStartRow - 1;
-            int emptyStreak = 0;
+            DataTable dt = Util.BuildDataTableFromSheet(sheet, Model, Revision, IssueDate, Issuer, colMap, IsFiltering, targetColIndex);
 
-            // Loop through each row in the file, or until we've seen a certain number of empty rows
-            while (rowIndex <= sheet.LastRowNum && emptyStreak < Config.EmptyRowLimit)
+            if (dt.Rows.Count > 0)
             {
-                IRow row = sheet.GetRow(rowIndex);
-                if (Util.IsRowEmpty(row))
+                try
                 {
-                    emptyStreak++;
-                    rowIndex++;
-                    continue;
+                    // Attempt a bulk copy
+                    await ExecuteBulkCopy(dt, conn);
                 }
-
-                emptyStreak = 0;
-
-                short? dummySampleNum = Util.ExtractPartNumber(Util.GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
-
-                bool passesFilter = true; // denotes that the current row either fulfills the filter or there is no filter to fulfill
-                if (IsFiltering)
+                catch (Exception)
                 {
-                    string filterCellValue = Util.GetCellText(row, targetColIndex);
-                    if (string.IsNullOrWhiteSpace(filterCellValue))
+                    // If bulk copy fails, fall back to row-by-row to find the culprit
+                    await Report("\t[BULK FAILED] One or more entries in this file could not be added to the database. Switching insertion modes for error reporting...\n", ReportLevel.WARNING);
+                    Stack<Report> rowSkipStack = new(); // Use a stack to ensure the skips are printed in the order they appear in the file
+
+                    // Iterate in reverse to guarantee indices don't move on deletion
+                    for (int i = dt.Rows.Count - 1; i >= 0; i--)
                     {
-                        passesFilter = false;
+                        DataRow dr = dt.Rows[i];
+                        try {
+                            await WriteRowToDatabase(dr, conn);
+                        }
+                        catch (SqlException rowEx) when (rowEx.Number == 2627 || rowEx.Number == 2601) {
+                            rowSkipStack.Push(new($"\t[ROW SKIP] Duplicate: Rev {Revision}, Location {dr["location"]} Dummy #{dr["dummySampleNum"]}\n", ReportLevel.IMPORTANT));
+                            hasDuplicate = true;
+                            dt.Rows.RemoveAt(i); // remove the problem row
+                        }
+                        catch (Exception rowEx) {
+                            rowSkipStack.Push(new($"\t[ROW SKIP] Error: {rowEx.Message}\n", ReportLevel.WARNING));
+                            hasMiscError = true;
+                            dt.Rows.RemoveAt(i); // remove the problem row
+                        }
                     }
-                }
-
-                // Only add (and count) the row if it has a dummy sample associated with it (otherwise it is irrelevant for label making purposes)
-                if (dummySampleNum != null && passesFilter)
-                {
-                    try
+                    while(rowSkipStack.Count > 0)
                     {
-                        DataRow dr = dt.NewRow();
-
-                        // Assign metadata
-                        dr["model"] = Model;
-                        dr["revision"] = Revision;
-                        dr["issueDate"] = IssueDate;
-                        dr["issuer"] = (object?)Issuer ?? DBNull.Value;
-
-                        // Get the data for this row
-                        dr["failureMode"] = Util.GetCellText(row, colMap["PROCESS FAILURE MODE"]).Replace("\n", "");
-                        dr["rank"] = Util.GetCellText(row, colMap["RANK"]);
-                        dr["location"] = Util.GetCellText(row, colMap["LOCATION"]);
-                        dr["dummySampleNum"] = dummySampleNum;
-
-                        dt.Rows.Add(dr);
-                        await WriteRowToDatabase(dr, conn);
-
-                    }
-                    catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
-                    {
-                        if (!hasDuplicate) await Report("\n");
-                        await Report($"\t[ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {Model} for dummy sample #{dummySampleNum}\n", ReportLevel.IMPORTANT);
-                        hasDuplicate = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        if (!hasMiscError) await Report("\n");
-                        await Report($"\t[ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}\n", ReportLevel.WARNING);
-                        hasMiscError = true;
+                        Report current = rowSkipStack.Pop();
+                        await Report(current.Message, current.Level);
                     }
                 }
-                rowIndex++;
             }
 
             // Report parse success/failure
@@ -412,5 +385,23 @@ public class FPSheetUploader
         cmd.Parameters.AddWithValue("@dummySampleNum", dr["dummySampleNum"]);
 
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task ExecuteBulkCopy(DataTable dt, SqlConnection conn)
+    {
+        using SqlBulkCopy bulkCopy = new(conn);
+        bulkCopy.DestinationTableName = "dbo.FoolproofInfo";
+
+        // Map DataTable columns to DB columns
+        bulkCopy.ColumnMappings.Add("model", "model");
+        bulkCopy.ColumnMappings.Add("revision", "revision");
+        bulkCopy.ColumnMappings.Add("issueDate", "issueDate");
+        bulkCopy.ColumnMappings.Add("issuer", "issuer");
+        bulkCopy.ColumnMappings.Add("failureMode", "failureMode");
+        bulkCopy.ColumnMappings.Add("rank", "rank");
+        bulkCopy.ColumnMappings.Add("location", "location");
+        bulkCopy.ColumnMappings.Add("dummySampleNum", "dummySampleNum");
+
+        await bulkCopy.WriteToServerAsync(dt);
     }
 }
