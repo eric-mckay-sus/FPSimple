@@ -12,7 +12,7 @@ using System.Text.RegularExpressions;
 /// <summary>
 /// Contains utility methods for pre-FP upload parsing.
 /// </summary>
-public static partial class FPUploadUtilities
+internal static partial class FPUploadUtilities
 {
     /// <summary>
     /// Dynamically maps header names to indices (reads all entries in header row).

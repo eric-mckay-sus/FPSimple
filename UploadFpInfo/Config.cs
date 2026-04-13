@@ -1,6 +1,7 @@
 // <copyright file="Config.cs" company="Stanley Electric US Co. Inc.">
 // Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
 // </copyright>
+
 namespace UploadFpInfo;
 
 using StringBuilder = Microsoft.Data.SqlClient.SqlConnectionStringBuilder;

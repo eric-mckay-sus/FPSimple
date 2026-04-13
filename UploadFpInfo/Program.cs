@@ -10,7 +10,7 @@ using NPOI.HSSF.UserModel;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
 
-using Util = FPUploadUtilities;
+using static UploadFpInfo.FPUploadUtilities; // static allows its methods to be accessed later without qualification
 
 /// <summary>
 /// Consolidates the parse/upload process for foolproof dummy sample sheets
@@ -105,7 +105,7 @@ public class FPSheetUploader
             {
                 (containsDuplicate, containsMiscError) = await this.RunBatch(path);
             }
-            else if (File.Exists(path) && Util.IsExcelFile(path))
+            else if (File.Exists(path) && IsExcelFile(path))
             {
                 (containsDuplicate, containsMiscError) = await this.ProcessFile(path);
             }
@@ -268,10 +268,10 @@ public class FPSheetUploader
         }
 
         // Extract metadata (header row)
-        (byte revision, DateTime issueDate, string? issuer) = Util.ParseMetadata(sheet);
+        (byte revision, DateTime issueDate, string? issuer) = ParseMetadata(sheet);
 
         // Get column indices associated with column names
-        Dictionary<string, int> colMap = Util.MapHeaderIndices(sheet);
+        Dictionary<string, int> colMap = MapHeaderIndices(sheet);
 
         // Initialize flags for error detection and intention to repeat
         bool hasDuplicate = false;
@@ -297,7 +297,7 @@ public class FPSheetUploader
             }
 
             // Initialize DataTable for rows
-            DataTable dt = Util.BuildDataTableFromSheet(sheet, model, revision, issueDate, issuer, colMap, isFiltering, targetColIndex);
+            DataTable dt = BuildDataTableFromSheet(sheet, model, revision, issueDate, issuer, colMap, isFiltering, targetColIndex);
 
             if (dt.Rows.Count > 0)
             {
@@ -404,7 +404,7 @@ public class FPSheetUploader
                     break;
                 }
 
-                targetColIndex = Util.ColumnIndex(filterColumnName);
+                targetColIndex = ColumnIndex(filterColumnName);
 
                 if (string.IsNullOrEmpty(filterColumnName))
                 {
