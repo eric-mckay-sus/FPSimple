@@ -1,297 +1,196 @@
-﻿using System.Data;
-using System.Globalization;
-using System.Text.RegularExpressions;
+﻿// <copyright file="Program.cs" company="Stanley Electric US Co. Inc.">
+// Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
+// </copyright>
+
+namespace UploadFpInfo;
+
+using System.Data;
 using Microsoft.Data.SqlClient;
 using NPOI.HSSF.UserModel;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
 
-namespace UploadFpInfo;
+using static UploadFpInfo.FPUploadUtilities; // static allows its methods to be accessed later without qualification
 
 /// <summary>
 /// Consolidates the parse/upload process for foolproof dummy sample sheets
+/// The model to line database must be populated for insertion validation to succeed.
 /// </summary>
-public class UploadFoolproofToDb
+public class FPSheetUploader
 {
     /// <summary>
-    /// Main entry point: detect input location argument and delegate to file/batch handler based on whether input location is file or folder
+    /// Determines where user input comes from.
     /// </summary>
-    /// <param name="args">Command line arguments, accepts 0-1</param>
-    /// <returns></returns>
+    private readonly IInputProvider input;
+
+    /// <summary>
+    /// Determines where/how program output is displayed.
+    /// </summary>
+    private readonly IReportOutputProvider output;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FPSheetUploader"/> class.
+    /// By default, uses the console for input and output.
+    /// </summary>
+    public FPSheetUploader()
+    {
+        this.input = new ConsoleInputProvider();
+        this.output = new ConsoleReporter();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FPSheetUploader"/> class, using the specified input and output providers.
+    /// </summary>
+    /// <param name="inputProvider">The instance of IInputProvider to be used to get input regarding FP sheet details.</param>
+    /// <param name="outputProvider">The instance of IReportOutputProvider to be used for displaying program results.</param>
+    public FPSheetUploader(IInputProvider inputProvider, IReportOutputProvider outputProvider)
+    {
+        this.input = inputProvider;
+        this.output = outputProvider;
+    }
+
+    /// <summary>
+    /// Main entry point: Instantiate an uploader using the default constructor to
+    /// print to the console, then delegate the actual ETL process to the uploader.
+    /// </summary>
+    /// <param name="args">Command line arguments, accepts an optional file path.</param>
+    /// <returns>A Task representing the completion of the program.</returns>
     public static async Task Main(string[] args)
     {
-        try
+        // If there was an input location argument, pass it along
+        string? potentialFile = null;
+        if (args.Length > 0)
         {
-            string path = args.Length > 0 ? args[0] : Config.InputLocation;
-            bool containsDuplicate = false;
-            bool containsMiscError = false;
-            string duplicateMessage = "One or more files contain duplicate entries. If you wish to update, please do so manually. Otherwise, no action is required.";
-            string miscErrorMessage = "One or more files contain invalid data. Scroll up to find out which file(s), and why.";
-
-            if (Directory.Exists(path))
-            {
-                Config.InputLocation = path;
-                (containsDuplicate, containsMiscError) = await RunBatch();
-            }
-            else if (File.Exists(path) && IsExcelFile(path))
-            {
-                (containsDuplicate, containsMiscError) = await ProcessSingleFile(path);
-                if (containsDuplicate) PrintInColor(duplicateMessage ,ConsoleColor.Cyan);
-            }
-            else
-            {
-                PrintInColor($"Path '{path}' is not a valid directory or Excel file. Using Config default ({Config.InputLocation}).", ConsoleColor.Yellow);
-            }
-
-            if (containsDuplicate) PrintInColor(duplicateMessage, ConsoleColor.Cyan);
-            if (containsMiscError) PrintInColor(miscErrorMessage, ConsoleColor.Yellow);
+            potentialFile = args[0];
         }
-        catch (Exception ex)
-        {
-            PrintInColor($"Fatal error: {ex.Message}", ConsoleColor.Red);
-        }
+
+        // Exit static by creating an uploader
+        FPSheetUploader uploader = new ();
+
+        // Defaults to the input location in config
+        await uploader.ExecuteAsync(potentialFile);
     }
 
     /// <summary>
-    /// Process a batch of FP info files
+    /// Identifies input location and whether it is a folder/file, then delegates to the batch/file handler.
+    /// Recommended entry point for other programs which use this one.
     /// </summary>
-    /// <returns>Whether the batch contains a file with entries that would have duplicate PKs in the DB</returns>
-    /// <exception cref="DirectoryNotFoundException">When the input location does not exist</exception>
-    private static async Task<(bool, bool)> RunBatch()
+    /// <param name="filename">An optional file path to override the one found in config.</param>
+    /// <returns>A Task representing the upload completion (regardless of success).</returns>
+    public async Task ExecuteAsync(string? filename = null)
     {
-        var inputDir = new DirectoryInfo(Config.InputLocation);
-        if (!inputDir.Exists) throw new DirectoryNotFoundException(Config.InputLocation);
-
-        FileInfo[] files = inputDir.GetFiles("*.xlsx")
-                            .Concat(inputDir.GetFiles("*.xls"))
-                            .OrderBy(f => f.Name)
-                            .ToArray();
-
-        if (files.Length == 0)
+        // Need to perform this check again because
+        string path = Config.InputLocation;
+        if (string.IsNullOrWhiteSpace(filename))
         {
-            Console.WriteLine("No Excel files found.");
-            return (false, false);
-        }
-
-        Console.WriteLine($"Found {files.Length} files. Starting upload to {Config.DbName}...");
-
-        bool currentContainsDuplicate = false;
-        bool currentContainsMisc = false;
-        bool batchContainsDuplicate = false;
-        bool batchContainsMisc = false;
-        foreach (FileInfo file in files)
-        {
-            try
-            {
-                (currentContainsDuplicate, currentContainsMisc) = await ProcessSingleFile(file.FullName);
-
-                // Assign batch & misc duplicate flag to current if it isn't already set (OR is short-circuiting so this is fast)
-                batchContainsDuplicate = batchContainsDuplicate || currentContainsDuplicate;
-                batchContainsMisc = batchContainsMisc || currentContainsMisc;
-            }
-            catch (Exception ex)
-            {
-                PrintInColor($"[SKIP] {ex.Message}", ConsoleColor.Yellow);
-            }
-        }
-        return (batchContainsDuplicate, batchContainsMisc);
-    }
-
-    /// <summary>
-    /// Process one FP info file
-    /// </summary>
-    /// <param name="excelPath">The path to the file to be processed</param>
-    /// <returns>A Task representing whether a would-be duplicate was encountered</returns>
-    /// <exception cref="Exception">When the file does not have a sheet at the specified index</exception>
-    private static async Task<(bool, bool)> ProcessSingleFile(string excelPath)
-    {
-        Console.Write($"Processing {Path.GetFileName(excelPath)}... ");
-
-        // Load Excel file
-        IWorkbook workbook;
-        using (var fs = new FileStream(excelPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-        {
-            workbook = excelPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)
-                ? new XSSFWorkbook(fs)
-                : new HSSFWorkbook(fs);
-        }
-
-        ISheet sheet = workbook.GetSheetAt(Config.SheetIndex)
-                    ?? throw new Exception($"Sheet index {Config.SheetIndex} not found.");
-
-        // Extract metadata (header row)
-        (string? Model, byte Revision, DateTime IssueDate, string? Issuer) = ParseMetadata(sheet);
-
-        // Get column indices associated with column names
-        Dictionary<string, int> colMap = MapHeaderIndices(sheet);
-
-        // Initialize DataTable for rows
-        DataTable dt = CreateFoolproofDataTable();
-        int rowIndex = Config.DataStartRow - 1;
-        int emptyStreak = 0;
-        int rowsProcessed = 0;
-        bool hasDuplicate = false;
-        bool hasMiscError = false;
-
-            while (rowIndex <= sheet.LastRowNum && emptyStreak < Config.EmptyRowLimit)
-            {
-                IRow row = sheet.GetRow(rowIndex);
-                if (IsRowEmpty(row))
-                {
-                    emptyStreak++;
-                    rowIndex++;
-                    continue;
-                }
-
-                emptyStreak = 0;
-
-                short? dummySampleNum = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
-
-                // Only add (and count) the row if it has a dummy sample associated with it (otherwise it is irrelevant for label making purposes)
-                if (dummySampleNum != null)
-                {
-                    try
-                    {
-                        DataRow dr = dt.NewRow();
-
-                        // Assign metadata
-                        dr["model"] = Model;
-                        dr["revision"] = Revision;
-                        dr["issueDate"] = IssueDate;
-                        dr["issuer"] = (object?)Issuer ?? DBNull.Value;
-
-                        // Get the data for this row
-                        dr["failureMode"] = GetCellText(row, colMap["PROCESS FAILURE MODE"]);
-                        dr["rank"] = GetCellText(row, colMap["RANK"]);
-                        dr["location"] = GetCellText(row, colMap["LOCATION"]);
-                        dr["dummySampleNum"] = dummySampleNum;
-
-                        dt.Rows.Add(dr);
-                        await WriteSingleRowToDatabase(dr);
-                        rowsProcessed++;
-
-                    }
-                    catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
-                    {
-                        if (!hasDuplicate) Console.WriteLine();
-                        PrintInColor($"   [ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {Model} for dummy sample #{dummySampleNum}", ConsoleColor.Cyan);
-                        hasDuplicate = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        if (!hasMiscError) Console.WriteLine();
-                        PrintInColor($"   [ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}", ConsoleColor.Yellow);
-                        hasMiscError = true;
-                    }
-                }
-                rowIndex++;
-            }
-
-        // Bulk upload to SQL
-        if (rowsProcessed > 0)
-        {
-            Console.WriteLine($"Uploaded {rowsProcessed} rows.");
+            await this.Report($"No file argument detected. Defaulting to config file input location ({Config.InputLocation})\n");
         }
         else
         {
-            Console.WriteLine("No rows with valid data.");
+            path = filename;
         }
-        return (hasDuplicate, hasMiscError);
-    }
 
-    /// <summary>
-    /// Gets the model, revision, issue date and issuer from the file header
-    /// </summary>
-    /// <param name="sheet">The sheet to be parsed</param>
-    /// <returns>A tuple containing the desired metadata</returns>
-    private static (string Model, byte Revision, DateTime IssueDate, string Issuer) ParseMetadata(ISheet sheet)
-    {
-        IRow dataRow = sheet.GetRow(Config.GlobalStartRow - 1);
-        int[] globalIndices = Config.GlobalColumns.Select(c => ColumnIndex(c) - 1).ToArray();
+        bool containsDuplicate = false;
+        bool containsMiscError = false;
+        string duplicateMessage = "One or more files contain duplicate entries. If you wish to update, please do so manually. Otherwise, no action is required.";
+        string miscErrorMessage = "One or more files contain invalid data. Scroll up to find out which file(s), and why.";
 
-        string baseModel = GetCellText(dataRow, globalIndices[0]);
-        string product = GetCellText(dataRow, globalIndices[1]);
-        string revRaw = GetCellText(dataRow, globalIndices[2]);
-        string dateRaw = GetCellText(dataRow, globalIndices[3]);
-        string issuer = GetCellText(dataRow, globalIndices[4]);
-
-        string model = $"{baseModel} {product}".Trim();
-        byte revision = TranslateRevString(revRaw);
-
-        // Clean common Excel date string artifacts
-        string cleanDate = dateRaw.Replace("th", "", StringComparison.OrdinalIgnoreCase)
-                                  .Replace("st", "", StringComparison.OrdinalIgnoreCase)
-                                  .Replace("nd", "", StringComparison.OrdinalIgnoreCase)
-                                  .Replace("rd", "", StringComparison.OrdinalIgnoreCase);
-
-        if (!DateTime.TryParse(cleanDate, out DateTime issueDate))
-            issueDate = DateTime.MinValue;
-
-        return (model, revision, issueDate, issuer);
-    }
-
-    /// <summary>
-    /// Creates a dictionary mapping header names to indices
-    /// </summary>
-    /// <param name="sheet"></param>
-    /// <returns></returns>
-    private static Dictionary<string, int> MapHeaderIndices(ISheet sheet)
-    {
-        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        IRow headerRow = sheet.GetRow(Config.DataHeaderRow - 1);
-
-        // Required target columns
-        string[] targets = ["PROCESS FAILURE MODE", "RANK", "LOCATION", "DUMMY SAMPLE REQUIRED?"];
-        foreach (string t in targets) map[t] = -1;
-
-        for (int i = 0; i < headerRow.LastCellNum; i++)
+        try
         {
-            string val = GetCellText(headerRow, i).ToUpper().Trim();
-            if (map.ContainsKey(val)) map[val] = i;
+            if (!Path.Exists(path))
+            {
+                await this.Report($"Path '{path}' is not a valid directory or Excel file. Using Config default ({Config.InputLocation}).\n", ReportLevel.WARNING);
+            }
+            else if (Directory.Exists(path))
+            {
+                (containsDuplicate, containsMiscError) = await this.RunBatch(path);
+            }
+            else if (File.Exists(path) && IsExcelFile(path))
+            {
+                (containsDuplicate, containsMiscError) = await this.ProcessFile(path);
+            }
+            else
+            {
+                await this.Report($"Could not find {path}. Please verify the path is correct, then try again.");
+            }
+
+            if (containsDuplicate)
+            {
+                await this.Report(duplicateMessage, ReportLevel.IMPORTANT);
+            }
+
+            if (containsMiscError)
+            {
+                await this.Report(miscErrorMessage, ReportLevel.ERROR);
+            }
+        }
+        catch (Exception ex)
+        {
+            await this.Report($"Fatal error: {ex.Message}", ReportLevel.ERROR);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that a particular model exists in the model to line (MTL) database.
+    /// </summary>
+    /// <param name="toValidate">The model name to validate.</param>
+    /// <returns>Whether <paramref name="toValidate"/> exists in the MTL database.</returns>
+    private static async Task<bool> ValidateModel(string? toValidate)
+    {
+        if (string.IsNullOrWhiteSpace(toValidate))
+        {
+            return false;
         }
 
-        return map;
-    }
-
-    /// <summary>
-    /// Get the part master number from an input string
-    /// First tries to get a numeric value after the # character, but falls back to any number in the input
-    /// If neither work, defaults to null (to denote this entry is irrelvant from a label-making standpoint)
-    /// </summary>
-    /// <param name="raw">The string to check for part master number</param>
-    /// <returns>The part master number as a short, or DBNull if one does not exist</returns>
-    private static short? ExtractPartNumber(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return null;
-
-        Match match = Regex.Match(raw, @"#(\d+)");
-        if (match.Success && short.TryParse(match.Groups[1].Value, out short result))
-            return result;
-
-        string digits = new(raw.Where(char.IsDigit).ToArray());
-        if (!string.IsNullOrEmpty(digits) && short.TryParse(digits, out short fallback))
-            return fallback;
-
-        return null;
-    }
-
-    /// <summary>
-    /// Asynchronously writes the input DataRow's contents to the FP info table
-    /// </summary>
-    /// <param name="dr">The DataRow whose contents will be written to the server</param>
-    /// <returns></returns>
-    private static async Task WriteSingleRowToDatabase(DataRow dr)
-    {
-        using var conn = new SqlConnection(Config.GetConnectionString());
+        using SqlConnection conn = new (Config.GetConnectionString());
         await conn.OpenAsync();
 
+        string sql = @"
+            SELECT COUNT(*) FROM dbo.ModelToLine
+                   WHERE shortDesc LIKE @model";
+
+        using SqlCommand cmd = new (sql, conn);
+        cmd.Parameters.AddWithValue("@model", toValidate);
+
+        int count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
+
+        return count > 0;
+    }
+
+    private static async Task ExecuteBulkCopy(DataTable dt, SqlConnection conn)
+    {
+        using SqlBulkCopy bulkCopy = new (conn);
+        bulkCopy.DestinationTableName = "dbo.FoolproofInfo";
+
+        // Map DataTable columns to DB columns
+        bulkCopy.ColumnMappings.Add("model", "model");
+        bulkCopy.ColumnMappings.Add("revision", "revision");
+        bulkCopy.ColumnMappings.Add("issueDate", "issueDate");
+        bulkCopy.ColumnMappings.Add("issuer", "issuer");
+        bulkCopy.ColumnMappings.Add("failureMode", "failureMode");
+        bulkCopy.ColumnMappings.Add("rank", "rank");
+        bulkCopy.ColumnMappings.Add("location", "location");
+        bulkCopy.ColumnMappings.Add("dummySampleNum", "dummySampleNum");
+
+        await bulkCopy.WriteToServerAsync(dt);
+    }
+
+    /// <summary>
+    /// Asynchronously writes the input DataRow's contents to the FP info table.
+    /// Only use this method after attempting (and failing) a bulk copy.
+    /// </summary>
+    /// <param name="dr">The DataRow whose contents will be written to the server.</param>
+    /// <param name="conn">The open SQL connection to be used in the SqlCommand.</param>
+    /// <returns>A Task representing the completion (or failure) of the insertion.</returns>
+    private static async Task WriteRowToDatabase(DataRow dr, SqlConnection conn)
+    {
         string sql = @"
             INSERT INTO dbo.FoolproofInfo
             (model, revision, issueDate, issuer, failureMode, rank, location, dummySampleNum)
             VALUES
             (@model, @revision, @issueDate, @issuer, @failureMode, @rank, @location, @dummySampleNum)";
 
-        using var cmd = new SqlCommand(sql, conn);
+        using SqlCommand cmd = new (sql, conn);
 
         // Mapping parameters from the DataRow
         cmd.Parameters.AddWithValue("@model", dr["model"]);
@@ -307,120 +206,223 @@ public class UploadFoolproofToDb
     }
 
     /// <summary>
-    /// Translates the string with revision number info, handling standard aliases
-    /// and clipping REV or R to return just the numeric data
+    /// Processes a batch of FP info files.
     /// </summary>
-    /// <param name="rev">The string containing revision information</param>
-    /// <returns>A byte representation of the revision number</returns>
-    private static byte TranslateRevString(string rev)
+    /// <returns>An tuple representing whether the batch contains a file that 1) contains PK collision(s) and 2) has a miscellaneous error.</returns>
+    private async Task<(bool, bool)> RunBatch(string directoryPath)
     {
-        rev = rev.ToUpper();
-        if (rev == "ORIG" || rev == "DRAFT") return 0;
-        string clean = Regex.Replace(rev, "[REV|R]", "");
-        return byte.TryParse(clean, out byte result) ? result : (byte)0;
-    }
+        DirectoryInfo inputDir = new (directoryPath);
 
-    /// <summary>
-    /// Constructs a DataTable mappable to the table on SQL Server.
-    /// The MaxLength attribute ensures no columns overflow before the server is contacted.
-    /// </summary>
-    /// <returns>A datatable compliant with the column names and datatypes in the FP table</returns>
-    private static DataTable CreateFoolproofDataTable()
-    {
-        DataSet ds = new();
-        DataTable dt = ds.Tables.Add("FoolproofInfo");
-        dt.Columns.Add("model", typeof(string)).MaxLength = 32;
-        dt.Columns.Add("revision", typeof(byte));
-        dt.Columns.Add("issueDate", typeof(DateTime));
-        dt.Columns.Add("issuer", typeof(string)).MaxLength = 32;
-        dt.Columns.Add("failureMode", typeof(string)).MaxLength = 100;
-        dt.Columns.Add("rank", typeof(string)).MaxLength = 1;
-        dt.Columns.Add("location", typeof(string)).MaxLength = 32;
-        dt.Columns.Add("dummySampleNum", typeof(short));
+        FileInfo[] files = inputDir.GetFiles("*.xlsx")
+                            .Concat(inputDir.GetFiles("*.xls"))
+                            .OrderBy(f => f.Name)
+                            .ToArray();
 
-        ds.EnforceConstraints = true;
-        return dt;
-    }
-
-    /// <summary>
-    /// Locates and reads the text of a cell with the specified row-col 'coordinates'
-    /// </summary>
-    /// <param name="row">The row object containing the desired data (and providing the y-coordinate)</param>
-    /// <param name="colIndex">The x-coordinate of the data to get</param>
-    /// <returns>A string of the text in the target cell</returns>
-    private static string GetCellText(IRow? row, int colIndex)
-    {
-        if (row == null || colIndex < 0) return "";
-        ICell cell = row.GetCell(colIndex);
-        if (cell == null) return "";
-
-        if (cell.CellType == CellType.Formula)
-            return ResolveCellText(cell, cell.CachedFormulaResultType);
-
-        return ResolveCellText(cell, cell.CellType);
-    }
-
-    /// <summary>
-    /// Reads the data inside a cell object based on its type
-    /// </summary>
-    /// <param name="cell">The cell object to read</param>
-    /// <param name="type">The datatype in the cell</param>
-    /// <returns>A string representation of the data in the specified cell</returns>
-    private static string ResolveCellText(ICell cell, CellType type)
-    {
-        return type switch
+        if (files.Length == 0)
         {
-            CellType.Numeric => DateUtil.IsCellDateFormatted(cell)
-                                ? cell.DateCellValue?.ToString("yyyy-MM-dd") ?? ""
-                                : cell.NumericCellValue.ToString(CultureInfo.InvariantCulture),
-            CellType.Boolean => cell.BooleanCellValue.ToString(),
-            CellType.String => cell.StringCellValue ?? "",
-            _ => ""
-        };
+            await this.Report("No Excel files found.", ReportLevel.ERROR);
+            return (false, false);
+        }
+
+        await this.Report($"Found {files.Length} files. Starting upload to {Config.DbName}...\n");
+
+        bool currentContainsDuplicate = false;
+        bool currentContainsMisc = false;
+        bool batchContainsDuplicate = false;
+        bool batchContainsMisc = false;
+        foreach (FileInfo file in files)
+        {
+            try
+            {
+                (currentContainsDuplicate, currentContainsMisc) = await this.ProcessFile(file.FullName);
+
+                // Assign batch & misc duplicate flag to current if it isn't already set (OR is short-circuiting so this is fast)
+                batchContainsDuplicate = batchContainsDuplicate || currentContainsDuplicate;
+                batchContainsMisc = batchContainsMisc || currentContainsMisc;
+            }
+            catch (Exception ex)
+            {
+                await this.Report($"\t[SKIP] {ex.Message}\n", ReportLevel.ERROR);
+                batchContainsMisc = true;
+            }
+        }
+
+        return (batchContainsDuplicate, batchContainsMisc);
     }
 
     /// <summary>
-    /// Verifies whether a row is empty
+    /// Processes one FP info file.
     /// </summary>
-    /// <param name="row">The row for which to check the contents</param>
-    /// <returns>Whether the row is empty</returns>
-    private static bool IsRowEmpty(IRow? row)
+    /// <param name="excelPath">The path to the file to be processed.</param>
+    /// <returns>A Task with a duplicate flag and a miscellaneous error flag.</returns>
+    /// <exception cref="Exception">When the file does not have a sheet at the specified index.</exception>
+    private async Task<(bool, bool)> ProcessFile(string excelPath)
     {
-        if (row == null) return true;
-        return row.Cells.All(c => string.IsNullOrWhiteSpace(ResolveCellText(c, c.CellType == CellType.Formula ? c.CachedFormulaResultType : c.CellType)));
+        // Load Excel file, grab the sheet, then close the Excel file
+        ISheet sheet;
+        using (FileStream fs = new (excelPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (IWorkbook workbook = excelPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ? new XSSFWorkbook(fs) : new HSSFWorkbook(fs))
+        {
+            sheet = workbook.GetSheetAt(Config.SheetIndex)
+                    ?? throw new Exception($"Sheet index {Config.SheetIndex} not found.\n");
+        }
+
+        // Extract metadata (header row)
+        (byte revision, DateTime issueDate, string? issuer) = ParseMetadata(sheet);
+
+        // Get column indices associated with column names
+        Dictionary<string, int> colMap = MapHeaderIndices(sheet);
+
+        // Initialize flags for error detection and intention to repeat
+        bool hasDuplicate = false;
+        bool hasMiscError = false;
+        bool applyAnotherFilter = false;
+        bool isNewFile = true;
+
+        // One DB connection to be used across all rows of this file
+        using SqlConnection conn = new (Config.GetConnectionString());
+        await conn.OpenAsync();
+
+        // Start the loop for applying multiple filters (run at least once)
+        do
+        {
+            (string model, bool isFiltering, int targetColIndex) = await this.CollectUserInput(Path.GetFileName(excelPath), isNewFile);
+            if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
+            {
+                return (hasDuplicate, hasMiscError);
+            }
+            else
+            {
+                isNewFile = true; // For the next iteration
+            }
+
+            // Initialize DataTable for rows
+            DataTable dt = BuildDataTableFromSheet(sheet, model, revision, issueDate, issuer, colMap, isFiltering, targetColIndex);
+
+            if (dt.Rows.Count > 0)
+            {
+                try
+                {
+                    // Attempt a bulk copy
+                    await ExecuteBulkCopy(dt, conn);
+                }
+                catch (Exception)
+                {
+                    // If bulk copy fails, fall back to row-by-row to find the culprit
+                    await this.Report("\t[BULK FAILED] One or more entries in this file could not be added to the database. Switching insertion modes for error reporting...\n", ReportLevel.WARNING);
+                    Stack<Report> rowSkipStack = new (); // Use a stack to ensure the skips are printed in the order they appear in the file
+
+                    // Iterate in reverse to guarantee indices don't move on deletion
+                    for (int i = dt.Rows.Count - 1; i >= 0; i--)
+                    {
+                        DataRow dr = dt.Rows[i];
+                        try
+                        {
+                            await WriteRowToDatabase(dr, conn);
+                        }
+                        catch (SqlException rowEx) when (rowEx.Number == 2627 || rowEx.Number == 2601)
+                        {
+                            rowSkipStack.Push(new ($"\t[ROW SKIP] Duplicate: Rev {revision}, Location {dr["location"]} Dummy #{dr["dummySampleNum"]}\n", ReportLevel.IMPORTANT));
+                            hasDuplicate = true;
+                            dt.Rows.RemoveAt(i); // remove the problem row
+                        }
+                        catch (Exception rowEx)
+                        {
+                            rowSkipStack.Push(new ($"\t[ROW SKIP] Error: {rowEx.Message}\n", ReportLevel.ERROR));
+                            hasMiscError = true;
+                            dt.Rows.RemoveAt(i); // remove the problem row
+                        }
+                    }
+
+                    while (rowSkipStack.Count > 0)
+                    {
+                        Report current = rowSkipStack.Pop();
+                        await this.Report(current.message, current.level);
+                    }
+                }
+            }
+
+            // Report parse success/failure
+            await this.output.ShowPreview(dt);
+
+            if (isFiltering)
+            {
+                applyAnotherFilter = await this.input.GetConfirmAsync(new ("\tWould you like to apply another filter/reuse this file for another model?"));
+                isNewFile = !applyAnotherFilter;
+            }
+            else
+            {
+                applyAnotherFilter = false;
+            }
+        }
+        while (applyAnotherFilter);
+
+        return (hasDuplicate, hasMiscError);
     }
 
     /// <summary>
-    /// Gets the column number (1-based) of an Excel alpha-column index (e.g. ...Y=25, Z=26, AA=27, AB=28)
-    /// It's just base 26 plus 1 represented by letters instead of numbers
+    /// Asks the user for C. Core model (mandatory) and column filter (optional), looping until valid input is provided.
     /// </summary>
-    /// <param name="col">The alpha-column index</param>
-    /// <returns>The number column index</returns>
-    private static int ColumnIndex(string col)
+    /// <param name="filename">The name of the file provided by the user.</param>
+    /// <param name="isNewModel">Whether this model is the same as the last one.</param>
+    /// <returns>A tuple representing the model, whether there is a filter, and the target column number.</returns>
+    private async Task<(string, bool, int)> CollectUserInput(string filename, bool isNewModel)
     {
-        int index = 0;
-        foreach (char c in col.ToUpper()) index = index * 26 + c - 'A' + 1;
-        return index;
+        string model = string.Empty;
+        bool isFiltering = false;
+        int targetColIndex = -1;
+
+        // This outer loop controls redirects to the model prompt (i.e. bad model name or 'R' in response to the column prompt)
+        while (true)
+        {
+            await this.Report($"{(isNewModel ? "[NEW]" : "[REPEAT]")} {filename}\n", ReportLevel.IMPORTANT);
+            Report modelPrompt = new ("\tPlease enter the C. Core model name for the contents to be imported (or type 'SKIP' to proceed to the next file):");
+            model = (await this.input.GetInputAsync(modelPrompt)).Trim();
+
+            if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
+            {
+                await this.Report($"\tSkipping file: {filename}\n", ReportLevel.WARNING);
+                return (model, isFiltering, targetColIndex);
+            }
+
+            if (!await ValidateModel(model))
+            {
+                await this.Report($"\t{model} is not in the model to line database. Please try again.\n", ReportLevel.WARNING);
+                isNewModel = false;
+                continue;
+            }
+
+            // This inner loop controls redirects to the column prompt (i.e. bad column )
+            while (true)
+            {
+                string colPrompt = $"\t[{model}] Enter Excel column name (BM-CJ), 'R' to change model, or ENTER for no filter:";
+                string filterColumnName = (await this.input.GetInputAsync(new (colPrompt))).Trim();
+
+                if (filterColumnName.Equals("R", StringComparison.OrdinalIgnoreCase))
+                { // Signal that this is a repeat, then repeat by breaking the inner loop, redirecting to outer loop
+                    isNewModel = false;
+                    break;
+                }
+
+                targetColIndex = ColumnIndex(filterColumnName);
+
+                if (string.IsNullOrEmpty(filterColumnName))
+                {
+                    isFiltering = false;
+                    return (model, isFiltering, -1);
+                }
+
+                if (targetColIndex >= 64 && targetColIndex <= 87)
+                {
+                    isFiltering = true;
+                    return (model, isFiltering, targetColIndex);
+                }
+
+                await this.Report($"\t{filterColumnName} is out of range. Please try again.\n", ReportLevel.WARNING);
+            }
+        }
     }
 
-    /// <summary>
-    /// Checks the input file's extension to see if it matches one of the Excel formats
-    /// </summary>
-    /// <param name="path">The filepath</param>
-    /// <returns>Whether <paramref name="path"/> is an Excel file</returns>
-    private static bool IsExcelFile(string path) =>
-        path.EndsWith(".xls", StringComparison.OrdinalIgnoreCase) ||
-        path.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Prints <paramref name="msg"/> in the specified <paramref name="color"/>
-    /// </summary>
-    /// <param name="msg">The text to be printed</param>
-    /// <param name="color">The color in which to print</param>
-    private static void PrintInColor(string msg, ConsoleColor color)
-    {
-        Console.ForegroundColor = color;
-        Console.WriteLine(msg);
-        Console.ResetColor();
-    }
+    // Creates a report and passes it on to the Progress instance
+    private async Task Report(string msg, ReportLevel level = ReportLevel.INFO) => await this.output.ReportAsync(new (msg, level));
 }
