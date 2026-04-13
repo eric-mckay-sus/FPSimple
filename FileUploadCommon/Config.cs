@@ -61,6 +61,7 @@ public static class Config
     /// Gets the connection string for the database whose credentials are stored in environment variables.
     /// </summary>
     /// <returns>A SQL Server connection string for access to the database.</returns>
+    /// <throws>InvalidOperationException when there are missing environment variable(s).</throws>
     public static string GetConnectionString()
     {
         static string GetRequired(string key)

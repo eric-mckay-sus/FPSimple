@@ -9,7 +9,6 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using CsvHelper.Configuration.Attributes;
 using Microsoft.Data.SqlClient;
-using ENV = Environment;
 
 using FileUploadCommon;
 

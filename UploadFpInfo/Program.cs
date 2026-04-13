@@ -6,9 +6,9 @@ namespace UploadFpInfo;
 
 using System.Data;
 using Microsoft.Data.SqlClient;
-using NPOI.HSSF.UserModel;
-using NPOI.SS.UserModel;
-using NPOI.XSSF.UserModel;
+using NPOI.HSSF.UserModel; // for older XLS files
+using NPOI.SS.UserModel; // for generic spreadsheet manipulation
+using NPOI.XSSF.UserModel; // for newer XLSX files
 
 using static FPUploadUtilities; // static allows its methods to be accessed later without qualification
 using FileUploadCommon;
