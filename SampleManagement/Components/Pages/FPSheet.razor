@@ -1,0 +1,123 @@
+﻿@page "/foolproof-sheet"
+@using System.Data
+@using UploadFpInfo
+@inject BlazorInputProvider InputProvider
+@inject BlazorReporter Reporter
+
+<PageTitle>Upload Foolproof Sheet</PageTitle>
+
+<div class="terminal-window">
+    @foreach (var log in Reporter.Logs)
+    {
+        <p class="@log.level.ToString().ToLower()">@log.message</p>
+    }
+
+    @if (Reporter.CurrentPreview != null && Reporter.CurrentPreview.Rows.Count > 0)
+    {
+        <div class="preview-container">
+            <table>
+                <thead>
+                    <tr>
+                        @foreach (DataColumn col in Reporter.CurrentPreview.Columns)
+                        {
+                            <th>@col.ColumnName</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (DataRow row in Reporter.CurrentPreview.Rows)
+                    {
+                        <tr>
+                            @foreach (var cell in row.ItemArray)
+                            {
+                                <td>@cell?.ToString()</td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* --- String Input Modal (Model Name/Filter) --- *@
+    @if (isWaitingForInput)
+    {
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <p>@currentPrompt?.message</p>
+                <input @bind="userInput" @onkeyup="HandleKeyUp" autofocus />
+                <div class="modal-buttons">
+                    <button @onclick="SubmitInput">Submit</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* --- Yes/No Confirmation Modal --- *@
+    @if (isWaitingForConfirm)
+    {
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <p>@currentPrompt?.message</p>
+                <div class="modal-buttons">
+                    <button @onclick="() => HandleConfirm(true)">Yes</button>
+                    <button @onclick="() => HandleConfirm(false)">No</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isWaitingForConfirm;
+    private bool isWaitingForInput;
+    private string userInput = string.Empty;
+    private Report? currentPrompt;
+
+    protected override void OnInitialized()
+    {
+        // Link the provider events to this component's state
+        InputProvider.OnConfirmationRequested += (prompt) => {
+            currentPrompt = prompt;
+            isWaitingForConfirm = true;
+            InvokeAsync(StateHasChanged);
+        };
+
+        InputProvider.OnInputRequested += (prompt) => {
+            currentPrompt = prompt;
+            userInput = string.Empty;
+            isWaitingForInput = true;
+            InvokeAsync(StateHasChanged);
+        };
+
+        Reporter.OnNotify += () => InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await StartUpload();
+    }
+
+    private void HandleConfirm(bool result)
+    {
+        isWaitingForConfirm = false;
+        InputProvider.SetConfirmResult(result);
+    }
+
+    private void SubmitInput()
+    {
+        isWaitingForInput = false;
+        InputProvider.SetInputResult(userInput);
+    }
+
+    private void HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") SubmitInput();
+    }
+
+    private async Task StartUpload()
+    {
+        FPSheetUploader uploader = new (InputProvider, Reporter);
+        await uploader.ExecuteAsync();
+    }
+}

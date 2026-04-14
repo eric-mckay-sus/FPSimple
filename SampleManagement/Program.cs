@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using SampleManagement.Authentication;
 using SampleManagement.Components;
+using FileUploadCommon;
 
 /// <summary>
 /// Hosts the application startup and configuration.
@@ -20,7 +21,7 @@ public static class Program
     /// <param name="args">Command-line arguments supplied by the host.</param>
     public static void Main(string[] args)
     {
-        var builder = WebApplication.CreateBuilder(args);
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
         // Database Configuration
         string? connectionString = builder.Configuration["ConnectionStrings__DefaultConnection"];
@@ -29,6 +30,11 @@ public static class Program
 
         builder.Services.AddScoped<IUserIdentityService, UserIdentityService>();
         builder.Services.AddMemoryCache();
+
+        builder.Services.AddScoped<BlazorInputProvider>();
+        builder.Services.AddScoped<IInputProvider>(sp => sp.GetRequiredService<BlazorInputProvider>());
+        builder.Services.AddScoped<BlazorReporter>();
+        builder.Services.AddScoped<IReportOutputProvider>(sp => sp.GetRequiredService<BlazorReporter>());
 
         // Authentication & Authorization
         builder.Services.AddAuthentication("AutoAuth")
@@ -45,7 +51,7 @@ public static class Program
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
 
-        var app = builder.Build();
+        WebApplication app = builder.Build();
 
         // Configure the HTTP request pipeline.
         if (!app.Environment.IsDevelopment())

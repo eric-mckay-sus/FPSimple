@@ -1,0 +1,60 @@
+﻿@page "/model-mappings"
+@using System.Data
+@using UploadModelMappings
+@inject BlazorInputProvider InputProvider
+@inject BlazorReporter Reporter
+
+<PageTitle>Upload Model Mappings</PageTitle>
+
+<div class="terminal-window">
+    @foreach (Report log in Reporter.Logs)
+    {
+        <p class="@log.level.ToString().ToLower()">@log.message</p>
+    }
+
+    @* Once the CSS is in place, this will actually create a modal *@
+    @if (isWaitingForConfirm)
+    {
+        <div class="modal-overlay">
+            <div class="modal-content">
+                <p>@currentPrompt?.message</p>
+                <button @onclick="() => HandleConfirm(true)">Yes</button>
+                <button @onclick="() => HandleConfirm(false)">No</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isWaitingForConfirm;
+    private Report? currentPrompt;
+
+    protected override void OnInitialized()
+    {
+        // Link the provider events to this component's state
+        InputProvider.OnConfirmationRequested += (prompt) => {
+            currentPrompt = prompt;
+            isWaitingForConfirm = true;
+            InvokeAsync(StateHasChanged);
+        };
+
+        Reporter.OnNotify += () => InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await StartUpload();
+    }
+
+    private void HandleConfirm(bool result)
+    {
+        isWaitingForConfirm = false;
+        InputProvider.SetConfirmResult(result);
+    }
+
+    private async Task StartUpload()
+    {
+        ModelMappingUploader uploader = new (InputProvider, Reporter);
+        await uploader.ExecuteAsync();
+    }
+}

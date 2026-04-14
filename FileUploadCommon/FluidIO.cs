@@ -195,19 +195,113 @@ public class ConsoleReporter : IReportOutputProvider
     }
 }
 
-// Vague idea for how to do reporting in Blazor
-// public class BlazorReporter : IReportOutputProvider
-// {
-//     private readonly MyComponent _owner;
-//     public BlazorReporter(MyComponent owner) => _owner = owner;
+/// <summary>
+/// An implementation of IInputProvider to get input from Blazor using a TaskCompletionSource.
+/// Register this as a service within SampleManagement/Program.cs.
+/// </summary>
+public class BlazorInputProvider : IInputProvider
+{
+    /// <summary>
+    /// Controls the completion state of an input request.
+    /// Blazor may control this as it sees fit without using a blocking call (thereby freezing itself bc Blazor is single-thread).
+    /// </summary>
+    private TaskCompletionSource<string>? inputTcs;
 
-// public async Task ReportAsync(Report report)
-//     {
-//         _owner.Messages.Add(report);
-//         await _owner.InvokeAsync(_owner.StateHasChanged);
-//     }
-// }
+    /// <summary>
+    /// Controls the completion state of a confirmation request.
+    /// Blazor may control this as it sees fit without using a blocking call (thereby freezing itself bc Blazor is single-thread).
+    /// </summary>
+    private TaskCompletionSource<bool>? confirmTcs;
 
-// Blazor input handler will require a TaskCompletionSource to allow the
-// GetInputAsync call to block the uploader logic without freezing the server/browser.
-// Bind the submit button to SetResult on the TaskCompletionSource to resume the uploader
+    /// <summary>
+    /// The Blazor action to perform when GetInputAsync is called.
+    /// </summary>
+    public event Action<Report>? OnInputRequested;
+
+    /// <summary>
+    /// The Blazor action to perform when a simple yes/no confirmation is requested
+    /// </summary>
+    public event Action<Report>? OnConfirmationRequested;
+
+    /// <summary>
+    /// <inheritdoc/>
+    /// </summary>
+    /// <param name="prompt">The prompt to show the user.</param>
+    /// <returns>A Task containing the string collected from Blazor.</returns>
+    public Task<string> GetInputAsync(Report prompt)
+    {
+        this.inputTcs = new TaskCompletionSource<string>();
+        this.OnInputRequested?.Invoke(prompt);
+        return this.inputTcs.Task;
+    }
+
+    /// <summary>
+    /// <inheritdoc/>
+    /// </summary>
+    /// <param name="prompt">The prompt to show the user.</param>
+    /// <returns>A Task containing the confirmation (or cancellation) from Blazor.</returns>
+    public Task<bool> GetConfirmAsync(Report prompt)
+    {
+        this.confirmTcs = new TaskCompletionSource<bool>();
+        this.OnConfirmationRequested?.Invoke(prompt);
+        return this.confirmTcs.Task;
+    }
+
+    /// <summary>
+    /// Fills <see cref="inputTcs"/> with <paramref name="result"/>.
+    /// </summary>
+    /// <param name="result">The desired contents of <see cref="inputTcs"/>. </param>
+    public void SetInputResult(string result) => this.inputTcs?.TrySetResult(result);
+
+    /// <summary>
+    /// Fills <see cref="confirmTcs"/> with <paramref name="result"/>.
+    /// </summary>
+    /// <param name="result">The desired contents of <see cref="confirmTcs"/>. </param>
+    public void SetConfirmResult(bool result) => this.confirmTcs?.TrySetResult(result);
+}
+
+/// <summary>
+/// An implementation of <see cref="IReportOutputProvider"/> that informs a Blazor page to show the new data.
+/// </summary>
+public class BlazorReporter : IReportOutputProvider
+{
+    /// <summary>
+    /// Notify the UI to re-render. The Blazor page must bind its StateHasChanged method to this Action.
+    /// </summary>
+    public event Action? OnNotify;
+
+    /// <summary>
+    /// Gets the list of <see cref="Report"/> objects accessible to the Blazor page.
+    /// </summary>
+    public List<Report> Logs { get; } = [];
+
+    /// <summary>
+    /// Gets the underlying DataTable object that stores the preview information.
+    /// It is important that Blazor persists this so it has concrete data during another upload.
+    /// </summary>
+    public DataTable? CurrentPreview { get; private set; }
+
+    /// <summary>
+    /// <inheritdoc/>
+    /// </summary>
+    /// <param name="report">The <see cref="Report"/> object to pass to Blazor.</param>
+    /// <returns>A Task denoting that Blazor has received and displayed the message.</returns>
+    public Task ReportAsync(Report report)
+    {
+        this.Logs.Add(report);
+        this.OnNotify?.Invoke();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// <inheritdoc/>
+    /// </summary>
+    /// <param name="dt">The DataTable to display.</param>
+    /// <returns>A Task denoting that Blazor has displayed the preview.</returns>
+    public Task ShowPreview(DataTable dt)
+    {
+        this.CurrentPreview = dt;
+        this.OnNotify?.Invoke();
+        return Task.CompletedTask;
+    }
+}
