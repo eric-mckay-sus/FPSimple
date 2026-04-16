@@ -80,7 +80,7 @@ public class ModelMappingUploader
     /// <summary>
     /// Determines where/how program output is displayed.
     /// </summary>
-    private readonly IReportOutputProvider output;
+    private readonly IOutputProvider output;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ModelMappingUploader"/> class.
@@ -97,7 +97,7 @@ public class ModelMappingUploader
     /// </summary>
     /// <param name="inputProvider">The instance of IInputProvider to be used to get input regarding model mapping details.</param>
     /// <param name="outputProvider">The instance of IReportOutputProvider to be used for displaying program results.</param>
-    public ModelMappingUploader(IInputProvider inputProvider, IReportOutputProvider outputProvider)
+    public ModelMappingUploader(IInputProvider inputProvider, IOutputProvider outputProvider)
     {
         this.input = inputProvider;
         this.output = outputProvider;

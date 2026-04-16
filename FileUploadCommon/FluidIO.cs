@@ -22,6 +22,11 @@ public enum ReportLevel
     IMPORTANT,
 
     /// <summary>
+    /// A report representing successful completion
+    /// </summary>
+    SUCCESS,
+
+    /// <summary>
     /// A report denoting something has failed, but will try again/fall back on a default
     /// </summary>
     WARNING,
@@ -30,12 +35,43 @@ public enum ReportLevel
     /// A report denoting something has failed (without retry)
     /// </summary>
     ERROR,
+}
+
+/// <summary>
+/// Defines a 'checkpoint' event to be watched by any output source that wishes to track progress.
+/// </summary>
+public enum ProgressEvent
+{
+    /// <summary>
+    /// The event representing when a new file has started.
+    /// </summary>
+    FileStarted,
 
     /// <summary>
-    /// A report representing successful completion
+    /// The event representing when a file has been skipped.
     /// </summary>
-    SUCCESS,
+    FileSkipped,
+
+    /// <summary>
+    /// The event representing when a file has been completeted (after 'repeat this file?' has been denied).
+    /// </summary>
+    FileCompleted,
+
+    /// <summary>
+    /// The event representing when the entire upload is complete.
+    /// </summary>
+    UploadComplete,
 }
+
+/// <summary>
+/// The data packet used by I/O classes to track a file with its upload status
+/// </summary>
+/// <param name="file">The file containing the model.</param>
+/// <param name="model">The model name (from C. Core).</param>
+/// <param name="hadDuplicates">Whether the model upload encountered duplicates.</param>
+/// <param name="hadErrors">Whether the model upload encountered other errors.</param>
+/// <param name="rowsUploaded">The number of rows uploaded for this model.</param>
+public record FileResult(string file, string model, bool hadDuplicates, bool hadErrors, int rowsUploaded);
 
 /// <summary>
 /// The data packet used by I/O classes to associate a report level with the report message.
@@ -54,8 +90,9 @@ public interface IInputProvider
     /// Prompts and awaits user input.
     /// </summary>
     /// <param name="prompt">The prompt requiring user input.</param>
+    /// <param name="previousError">The previous error that prompted this input, if applicable.</param>
     /// <returns>A Task containing the user's input.</returns>
-    Task<string> GetInputAsync(Report prompt);
+    Task<string> GetInputAsync(Report prompt, string? previousError = null);
 
     /// <summary>
     /// Prompts and awaits user input for a yes/no question.
@@ -70,14 +107,39 @@ public interface IInputProvider
 /// <summary>
 /// Defines thread-safe asynchronous output redirection for Report records (custom IProgress).
 /// </summary>
-public interface IReportOutputProvider
+public interface IOutputProvider
 {
+    /// <summary>
+    /// Gets the name of the file currently being processed.
+    /// </summary>
+    public string? CurrentFileName { get; }
+
+    /// <summary>
+    /// Gets or sets the results of this batch.
+    /// </summary>
+    public IList<FileResult> BatchResults { get; set; }
+
+    /// <summary>
+    /// Sets <see cref="CurrentFileName"/> to <paramref name="name"/>.
+    /// Distinct from the <see cref="CurrentFileName"/> setter property to allow only setting it privately.
+    /// </summary>
+    /// <param name="name">The new current file name.</param>
+    /// <returns>A Task representing that the file name has been changed.</returns>
+    Task SetCurrentFile(string name);
+
     /// <summary>
     /// Asynchronously displays a report to the output.
     /// </summary>
-    /// <param name="report">The report record to be displayed.</param>
+    /// <param name="report">The <see cref="Report"/> record to be displayed.</param>
     /// <returns>A task signaling that the output has finished reporting.</returns>
     Task ReportAsync(Report report);
+
+    /// <summary>
+    /// Asynchronously reports progress to the output.
+    /// </summary>
+    /// <param name="ev">The <see cref="ProgressEvent"/> to report.</param>
+    /// <returns>A Task representing that the output has received the progress report.</returns>
+    Task ReportProgress(ProgressEvent ev);
 
     /// <summary>
     /// Asynchronously displays <paramref name="dt"/> to the output.
@@ -96,8 +158,9 @@ public class ConsoleInputProvider : IInputProvider
     /// <inheritdoc/> Uses standard console methods suitable for a CLI.
     /// </summary>
     /// <param name="prompt"><inheritdoc/></param>
+    /// <param name="previousError">Unused in this implementation.</param>
     /// <returns>A Task containing the command line input.</returns>
-    public async Task<string> GetInputAsync(Report prompt)
+    public async Task<string> GetInputAsync(Report prompt, string? previousError = null)
     {
         Console.WriteLine(prompt.ToAnsiString());
         Console.Write('\t');
@@ -122,19 +185,48 @@ public class ConsoleInputProvider : IInputProvider
 /// <summary>
 /// An implementation of IReportOutputProvider that prints to the console.
 /// </summary>
-public class ConsoleReporter : IReportOutputProvider
+public class ConsoleReporter : IOutputProvider
 {
+    /// <summary>
+    /// Gets the name of the file currently being processed.
+    /// </summary>
+    public string CurrentFileName { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the results for each file in this batch.
+    /// </summary>
+    public IList<FileResult> BatchResults { get; set; } = [];
+
+    /// <summary>
+    /// Sets <see cref="CurrentFileName"/> to <paramref name="name"/>.
+    /// </summary>
+    /// <param name="name">The name to assign to <see cref="CurrentFileName"/>.</param>
+    /// <returns><inheritdoc/></returns>
+    public async Task SetCurrentFile(string name)
+    {
+        this.CurrentFileName = name;
+        await Task.CompletedTask;
+    }
+
     /// <summary>
     /// <inheritdoc/>
     /// In this case, the output is the console, so we just use Console.Write.
     /// </summary>
     /// <param name="report"><inheritdoc/></param>
     /// <returns>A Task representing that the console has finished printing.</returns>
-    public Task ReportAsync(Report report)
+    public async Task ReportAsync(Report report)
     {
         Console.Write(report.ToAnsiString());
-        return Task.CompletedTask;
+        await Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Asynchronously reports progress to the console.
+    /// At the moment, this is not used, it simply implements the interface.
+    /// </summary>
+    /// <param name="ev"><inheritdoc/></param>
+    /// <returns>A Task representing that the console has reported progress.</returns>
+    public async Task ReportProgress(ProgressEvent ev) => await Task.CompletedTask;
 
     /// <summary>
     /// Prints the contents of <paramref name="dt"/> to the console.
@@ -216,7 +308,7 @@ public class BlazorInputProvider : IInputProvider
     /// <summary>
     /// The Blazor action to perform when GetInputAsync is called.
     /// </summary>
-    public event Action<Report>? OnInputRequested;
+    public event Action<Report, string?>? OnInputRequested;
 
     /// <summary>
     /// The Blazor action to perform when a simple yes/no confirmation is requested
@@ -227,11 +319,12 @@ public class BlazorInputProvider : IInputProvider
     /// <inheritdoc/>
     /// </summary>
     /// <param name="prompt">The prompt to show the user.</param>
+    /// <param name="previousError">The error prompting this input, if applicable.</param>
     /// <returns>A Task containing the string collected from Blazor.</returns>
-    public Task<string> GetInputAsync(Report prompt)
+    public Task<string> GetInputAsync(Report prompt, string? previousError = null)
     {
         this.inputTcs = new TaskCompletionSource<string>();
-        this.OnInputRequested?.Invoke(prompt);
+        this.OnInputRequested?.Invoke(prompt, previousError);
         return this.inputTcs.Task;
     }
 
@@ -261,9 +354,9 @@ public class BlazorInputProvider : IInputProvider
 }
 
 /// <summary>
-/// An implementation of <see cref="IReportOutputProvider"/> that informs a Blazor page to show the new data.
+/// An implementation of <see cref="IOutputProvider"/> that informs a Blazor page to show the new data.
 /// </summary>
-public class BlazorReporter : IReportOutputProvider
+public class BlazorReporter : IOutputProvider
 {
     /// <summary>
     /// Notify the UI to re-render. The Blazor page must bind its StateHasChanged method to this Action.
@@ -271,15 +364,42 @@ public class BlazorReporter : IReportOutputProvider
     public event Action? OnNotify;
 
     /// <summary>
-    /// Gets the list of <see cref="Report"/> objects accessible to the Blazor page.
+    /// Notify the UI of a new progress update. The Blazor page must subscribe to this event to update the loading bar.
     /// </summary>
-    public List<Report> Logs { get; private set; } = [];
+    public event Action<ProgressEvent>? OnProgress;
+
+    /// <summary>
+    /// Gets the name of the file currently being processed.
+    /// </summary>
+    public string CurrentFileName { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the results for each file in this batch.
+    /// </summary>
+    public IList<FileResult> BatchResults { get; set; } = [];
+
+    /// <summary>
+    /// Gets the list of <see cref="Report"/> objects that document a warning or error.
+    /// </summary>
+    public IList<Report> Logs { get; private set; } = [];
 
     /// <summary>
     /// Gets the underlying DataTable object that stores the preview information.
     /// It is important that Blazor persists this so it has concrete data during another upload.
     /// </summary>
     public DataTable? CurrentPreview { get; private set; }
+
+    /// <summary>
+    /// Sets <see cref="CurrentFileName"/> to <paramref name="name"/>, then notifies Blazor.
+    /// </summary>
+    /// <param name="name">The name to assign to <see cref="CurrentFileName"/>.</param>
+    /// <returns><inheritdoc/></returns>
+    public Task SetCurrentFile(string name)
+    {
+        this.CurrentFileName = name;
+        this.OnNotify?.Invoke();
+        return Task.CompletedTask;
+    }
 
     /// <summary>
     /// Clears the logs so old data does not persist.
@@ -296,10 +416,26 @@ public class BlazorReporter : IReportOutputProvider
     /// </summary>
     /// <param name="report">The <see cref="Report"/> object to pass to Blazor.</param>
     /// <returns>A Task denoting that Blazor has received and displayed the message.</returns>
-    public Task ReportAsync(Report report)
+    public async Task ReportAsync(Report report)
     {
-        this.Logs.Add(report);
+        // Only log errors to the Blazor interface
+        if ((report.level == ReportLevel.WARNING || report.level == ReportLevel.ERROR) && !report.message.Contains("Please try again"))
+        {
+            this.Logs.Add(report);
+        }
+
         this.OnNotify?.Invoke();
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Reports a progress update by firing the <see cref="OnProgress"/> event, to which the Blazor page has subscribed.
+    /// </summary>
+    /// <param name="ev"><inheritdoc/></param>
+    /// <returns>A Task representing that the Blazor page has received the message.</returns>
+    public Task ReportProgress(ProgressEvent ev)
+    {
+        this.OnProgress?.Invoke(ev);
         return Task.CompletedTask;
     }
 
@@ -308,10 +444,10 @@ public class BlazorReporter : IReportOutputProvider
     /// </summary>
     /// <param name="dt">The DataTable to display.</param>
     /// <returns>A Task denoting that Blazor has displayed the preview.</returns>
-    public Task ShowPreview(DataTable dt)
+    public async Task ShowPreview(DataTable dt)
     {
         this.CurrentPreview = dt;
         this.OnNotify?.Invoke();
-        return Task.CompletedTask;
+        await Task.CompletedTask;
     }
 }

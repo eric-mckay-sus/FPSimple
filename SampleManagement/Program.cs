@@ -34,7 +34,7 @@ public static class Program
         builder.Services.AddTransient<BlazorInputProvider>();
         builder.Services.AddTransient<IInputProvider>(sp => sp.GetRequiredService<BlazorInputProvider>());
         builder.Services.AddTransient<BlazorReporter>();
-        builder.Services.AddTransient<IReportOutputProvider>(sp => sp.GetRequiredService<BlazorReporter>());
+        builder.Services.AddTransient<IOutputProvider>(sp => sp.GetRequiredService<BlazorReporter>());
 
         // Authentication & Authorization
         builder.Services.AddAuthentication("AutoAuth")

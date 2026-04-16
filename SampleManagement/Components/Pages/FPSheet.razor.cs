@@ -27,9 +27,9 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     private Report? currentPrompt;
 
     /// <summary>
-    /// Gets the amount of progress allotted to one checkpoint.
+    /// The error displayed underneath the input box, if applicable.
     /// </summary>
-    private int ProgIncrement => 96 / (2 * this.selectedFiles.Count);
+    private string? inputError;
 
     /// <summary>
     /// When this page loads, wire the input provider's confirmation and user input events to auto-open an alert (with flag).
@@ -45,29 +45,29 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
             this.InvokeAsync(this.StateHasChanged);
         };
 
-        this.InputProvider.OnInputRequested += (prompt) =>
+        this.InputProvider.OnInputRequested += (prompt, error) =>
         {
             this.currentPrompt = prompt;
+            this.inputError = error;
             this.UserInputText = string.Empty;
             this.IsAwaitingInput = true;
             this.InvokeAsync(this.StateHasChanged);
         };
 
-        // Do the same for the output provider event
-        this.Reporter.OnNotify += () =>
-        {
-            Report? lastLog = this.Reporter.Logs.LastOrDefault();
-            if (lastLog != null)
-            {
-                // Map CLI strings to GUI Progress
-                this.CurrentDisplayStatus = lastLog.message;
-                if (lastLog.message.Contains("NEW") || lastLog.message.Contains("UPLOAD") || lastLog.message.Contains("Skipping"))
-                {
-                    // Clamp the progress so it never exceeds 100
-                    this.ProgressPercent = Math.Min(100, this.ProgressPercent + this.ProgIncrement);
-                }
-            }
+        // Do the same for the output provider events
+        this.Reporter.OnNotify += () => this.InvokeAsync(this.StateHasChanged);
 
+        this.Reporter.OnProgress += (ev) =>
+        {
+            this.CurrentDisplayStatus = this.Reporter.CurrentFileName;
+            this.ProgressPercent = ev switch
+            {
+                ProgressEvent.FileStarted => Math.Min(95, this.ProgressPercent + (95 / (this.selectedFiles.Count * 2))),
+                ProgressEvent.FileSkipped => Math.Min(95, this.ProgressPercent + (95 / (this.selectedFiles.Count * 2))),
+                ProgressEvent.FileCompleted => Math.Min(95, this.ProgressPercent + (95 / (this.selectedFiles.Count * 2))),
+                ProgressEvent.UploadComplete => 100,
+                _ => this.ProgressPercent
+            };
             this.InvokeAsync(this.StateHasChanged);
         };
     }
@@ -96,6 +96,14 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         }
 
         return list;
+    }
+
+    /// <summary>
+    /// Gets the summary of the entire batch process from the reporter.
+    /// </summary>
+    private IEnumerable<FileResult> GetBatchSummary()
+    {
+        return this.Reporter?.BatchResults ?? Enumerable.Empty<FileResult>();
     }
 
     /// <summary>
@@ -207,7 +215,6 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
                 this.ProgressPercent = 100; // Guarantee the progress bar made it all the way
                 await Task.Delay(750); // Make sure it's actually visible to the user for a moment
                 await this.RefreshData();
-                this.Reporter.ClearLogs();
                 this.ToastService.Notify(new (ToastType.Success, "Foolproof sheets successfully uploaded!"));
             }
         }
@@ -217,9 +224,29 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         }
         finally
         {
-            this.Dispose();
+            this.CleanupFileSystem();
+            this.ProgressTimer?.Dispose();
             await this.JS.InvokeVoidAsync("preventConfigurationLoss.clearEditorHandler");
             this.selectedFiles.Clear();
         }
+    }
+
+    /// <summary>
+    /// Finishes the upload by dismissing logs, batch results, and resetting state flags.
+    /// </summary>
+    private void CloseUpload()
+    {
+        this.Reporter.ClearLogs();
+        this.Reporter.BatchResults.Clear();
+
+        // this.Reporter.CurrentPreview = null;
+        this.IsUploading = false;
+        this.ProgressPercent = 0;
+        this.DisplayPercent = 0;
+
+        // Refresh the background data to ensure the main table is up to date
+        _ = this.RefreshData();
+
+        this.StateHasChanged();
     }
 }

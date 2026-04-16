@@ -9,10 +9,10 @@ using Microsoft.Data.SqlClient;
 using NPOI.HSSF.UserModel; // for older XLS files
 using NPOI.SS.UserModel; // for generic spreadsheet manipulation
 using NPOI.XSSF.UserModel; // for newer XLSX files
+using static Path;
 
 using static FPUploadUtilities; // static allows its methods to be accessed later without qualification
 using FileUploadCommon;
-using Microsoft.SqlServer.Server;
 
 /// <summary>
 /// Consolidates the parse/upload process for foolproof dummy sample sheets
@@ -28,7 +28,7 @@ public class FPSheetUploader
     /// <summary>
     /// Determines where/how program output is displayed.
     /// </summary>
-    private readonly IReportOutputProvider output;
+    private readonly IOutputProvider output;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FPSheetUploader"/> class.
@@ -45,7 +45,7 @@ public class FPSheetUploader
     /// </summary>
     /// <param name="inputProvider">The instance of IInputProvider to be used to get input regarding FP sheet details.</param>
     /// <param name="outputProvider">The instance of IReportOutputProvider to be used for displaying program results.</param>
-    public FPSheetUploader(IInputProvider inputProvider, IReportOutputProvider outputProvider)
+    public FPSheetUploader(IInputProvider inputProvider, IOutputProvider outputProvider)
     {
         this.input = inputProvider;
         this.output = outputProvider;
@@ -87,6 +87,10 @@ public class FPSheetUploader
         {
             await this.Report($"No file specified. Defaulting to config file input location ({path})\n");
         }
+        else if (!Path.Exists(path))
+        {
+            await this.Report($"Path '{filename}' is not a valid directory or Excel file. Using Config default ({path}).\n", ReportLevel.WARNING);
+        }
         else
         {
             path = filename;
@@ -94,16 +98,10 @@ public class FPSheetUploader
 
         bool containsDuplicate = false;
         bool containsMiscError = false;
-        string duplicateMessage = "One or more files contain duplicate entries. If you wish to update, please do so manually. Otherwise, no action is required.";
-        string miscErrorMessage = "One or more files contain invalid data. Scroll up to find out which file(s), and why.";
 
         try
         {
-            if (!Path.Exists(path))
-            {
-                await this.Report($"Path '{filename}' is not a valid directory or Excel file. Using Config default ({path}).\n", ReportLevel.WARNING);
-            }
-            else if (Directory.Exists(path))
+            if (Directory.Exists(path))
             {
                 (containsDuplicate, containsMiscError) = await this.RunBatch(path);
             }
@@ -116,14 +114,21 @@ public class FPSheetUploader
                 await this.Report($"Could not find {path}. Please verify the path is correct, then try again.");
             }
 
+            // Declare the upload as complete when the batch/file finishes
+            await this.output.ReportProgress(ProgressEvent.UploadComplete);
+
             if (containsDuplicate)
             {
-                await this.Report(duplicateMessage, ReportLevel.IMPORTANT);
+                string[] duplicateNames = this.output.BatchResults.Where(fr => fr.hadDuplicates).Select(fr => GetFileName(fr.model)).ToArray();
+                string report = string.Join(", ", duplicateNames);
+                await this.Report($"The following files contain duplicate entries: {report}. If you wish to update, do so manually. Otherwise, no action is required.", ReportLevel.WARNING);
             }
 
             if (containsMiscError)
             {
-                await this.Report(miscErrorMessage, ReportLevel.ERROR);
+                string[] miscNames = this.output.BatchResults.Where(fr => fr.hadErrors).Select(fr => GetFileName(fr.model)).ToArray();
+                string report = string.Join(", ", miscNames);
+                await this.Report($"The following files contain miscellaneous errors: {report}. Please investigate them to verify why they could not upload.", ReportLevel.ERROR);
             }
         }
         catch (FormatException f)
@@ -269,13 +274,15 @@ public class FPSheetUploader
     /// <exception cref="Exception">When the file does not have a sheet at the specified index.</exception>
     private async Task<(bool, bool)> ProcessFile(string excelPath)
     {
+        await this.output.SetCurrentFile(GetFileName(excelPath));
+
         // Load Excel file, grab the sheet, then close the Excel file
         ISheet sheet;
         using (FileStream fs = new (excelPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
         using (IWorkbook workbook = excelPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ? new XSSFWorkbook(fs) : new HSSFWorkbook(fs))
         {
             sheet = workbook.GetSheetAt(Config.SheetIndex)
-                    ?? throw new Exception($"Sheet index {Config.SheetIndex} not found in {excelPath}.\n");
+                    ?? throw new Exception($"Sheet index {Config.SheetIndex} not found in {GetFileName(excelPath)}.\n");
         }
 
         // Extract and validate metadata (header row)
@@ -283,15 +290,15 @@ public class FPSheetUploader
 
         if (issueDate == DateTime.MinValue)
         {
-            throw new FormatException($"Could not find a valid issue date in the header area of {excelPath}.");
+            throw new FormatException($"Could not find a valid issue date in the header area of {GetFileName(excelPath)}.");
         }
         else if (revision == byte.MaxValue)
         {
-            throw new FormatException($"Could not find a valid revision number in the header area of {excelPath}.");
+            throw new FormatException($"Could not find a valid revision number in the header area of {GetFileName(excelPath)}.");
         }
         else if (string.IsNullOrWhiteSpace(issuer))
         {
-            throw new FormatException($"Could not find a valid issuer name in the header area of {excelPath}.");
+            throw new FormatException($"Could not find a valid issuer name in the header area of {GetFileName(excelPath)}.");
         }
 
         // Get column indices associated with column names and verify all necessary columns are present
@@ -300,7 +307,7 @@ public class FPSheetUploader
         {
             if (colMap[header] == -1)
             {
-                throw new FormatException($"Missing required column '{header}' in {excelPath}.");
+                throw new FormatException($"Missing required column '{header}' in {GetFileName(excelPath)}.");
             }
         }
 
@@ -314,12 +321,16 @@ public class FPSheetUploader
         using SqlConnection conn = new (Config.GetConnectionString());
         await conn.OpenAsync();
 
+        // Report file start just before the 'apply another filter?' loop to track only new files started
+        await this.output.ReportProgress(ProgressEvent.FileStarted);
+
         // Start the loop for applying multiple filters (run at least once)
         do
         {
-            (string model, bool isFiltering, int targetColIndex) = await this.CollectUserInput(Path.GetFileName(excelPath), isNewFile);
+            (string model, bool isFiltering, int targetColIndex) = await this.CollectUserInput(GetFileName(excelPath), isNewFile);
             if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
             {
+                await this.output.ReportProgress(ProgressEvent.FileSkipped);
                 return (hasDuplicate, hasMiscError);
             }
             else
@@ -375,6 +386,7 @@ public class FPSheetUploader
 
             // Report parse success/failure
             await this.output.ShowPreview(dt);
+            this.output.BatchResults.Add(new (excelPath, model, hasDuplicate, hasMiscError, dt.Rows.Count)); // Add a summary row by model and file
 
             if (isFiltering)
             {
@@ -388,6 +400,9 @@ public class FPSheetUploader
         }
         while (applyAnotherFilter);
 
+        // Files are marked as complete once the user stops collecting data from them
+        await this.output.ReportProgress(ProgressEvent.FileCompleted);
+
         return (hasDuplicate, hasMiscError);
     }
 
@@ -400,6 +415,7 @@ public class FPSheetUploader
     private async Task<(string, bool, int)> CollectUserInput(string filename, bool isNewModel)
     {
         string model = string.Empty;
+        string? error = null;
         bool isFiltering = false;
         int targetColIndex = -1;
 
@@ -408,7 +424,7 @@ public class FPSheetUploader
         {
             await this.Report($"{(isNewModel ? "[NEW]" : "[REPEAT]")} {filename}\n", ReportLevel.IMPORTANT);
             Report modelPrompt = new ("\tPlease enter the C. Core model name for the contents to be imported (or type 'SKIP' to proceed to the next file):");
-            model = (await this.input.GetInputAsync(modelPrompt)).Trim();
+            model = (await this.input.GetInputAsync(modelPrompt, error)).Trim();
 
             if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
             {
@@ -419,19 +435,23 @@ public class FPSheetUploader
             if (!await ValidateModel(model))
             {
                 await this.Report($"\t{model} is not in the model to line database. Please try again.\n", ReportLevel.WARNING);
+                error = $"{model} is not in the model to line database. Please try again.";
                 isNewModel = false;
                 continue;
             }
+
+            error = null; // reset error message here to avoid overwriting either prompt
 
             // This inner loop controls redirects to the column prompt (i.e. bad column )
             while (true)
             {
                 string colPrompt = $"\t[{model}] Enter Excel column name (BM-CJ), 'R' to change model, or ENTER for no filter:";
-                string filterColumnName = (await this.input.GetInputAsync(new (colPrompt))).Trim();
+                string filterColumnName = (await this.input.GetInputAsync(new (colPrompt), error)).Trim();
 
                 if (filterColumnName.Equals("R", StringComparison.OrdinalIgnoreCase))
                 { // Signal that this is a repeat, then repeat by breaking the inner loop, redirecting to outer loop
                     isNewModel = false;
+                    error = null;
                     break;
                 }
 
@@ -450,6 +470,7 @@ public class FPSheetUploader
                 }
 
                 await this.Report($"\t{filterColumnName} is out of range. Please try again.\n", ReportLevel.WARNING);
+                error = $"{filterColumnName} is out of range. Please try again.";
             }
         }
     }
