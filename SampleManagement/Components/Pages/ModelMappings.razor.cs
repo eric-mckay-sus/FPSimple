@@ -70,9 +70,11 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
         string trustedFileName = $"model_line_mappings_{DateTime.Now:yyyy-MM-dd}";
         this.filePath = Path.Combine(this.UploadsFolderPath, trustedFileName + extension);
 
-        // Stream the file data from the element to the server
-        using FileStream stream = new (this.filePath, FileMode.Create);
-        await this.selectedFile.OpenReadStream().CopyToAsync(stream);
+        // Stream the file data from the element to the server (must use block using statement to close stream before the uploader tries to create a new one)
+        using (FileStream stream = new (this.filePath, FileMode.Create))
+        {
+            await this.selectedFile.OpenReadStream().CopyToAsync(stream);
+        }
 
         ModelMappingUploader uploader = new (this.InputProvider, this.Reporter);
         return await uploader.ExecuteAsync(this.filePath);

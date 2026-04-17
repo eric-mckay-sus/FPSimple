@@ -151,6 +151,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     {
         // Cancel any existing progress timer
         this.TimerCts?.Cancel();
+        this.TimerCts?.Dispose();
         this.TimerCts = new ();
         CancellationToken token = this.TimerCts.Token;
 

@@ -95,7 +95,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
             string trustedFileName = $"{Path.GetFileNameWithoutExtension(file.Name)}_{DateTime.Now:yyyy-MM-dd}{Path.GetExtension(file.Name)}";
             string filePath = Path.Combine(this.UploadsFolderPath, trustedFileName);
 
-            // Stream the file data from the element to the server
+            // Stream the file data from the element to the server (must use block using statement to close stream before the uploader tries to create a new one)
             using (FileStream stream = new (filePath, FileMode.Create))
             {
                 await file.OpenReadStream().CopyToAsync(stream);
