@@ -77,8 +77,8 @@ public partial class CreateSample : TableManager<Sample>
         this.allMappings = await context.ModelToLine.ToListAsync();
 
         // Initialize the UI lists with everything
-        this.availableModels = this.allMappings.Select(m => m.ShortDescription).Distinct().ToList();
-        this.availableLines = this.allMappings.Select(m => m.WorkCenterCode).Distinct().ToList();
+        this.availableModels = this.allMappings.Select(m => m.ShortDescription).Distinct().OrderBy(x => x).ToList();
+        this.availableLines = this.allMappings.Select(m => m.WorkCenterCode).Distinct().OrderBy(x => x).ToList();
 
         await base.RefreshData(keepPage);
     }
@@ -86,11 +86,12 @@ public partial class CreateSample : TableManager<Sample>
     /// <summary>
     /// When this page loads, set the sorting information, then let the parent set up.
     /// </summary>
-    protected override void OnInitialized()
+    /// <returns>A Task representing that the page has loaded.</returns>
+    protected override async Task OnInitializedAsync()
     {
         this.CurrentSortColumn = "CreationDate";
         this.SortDir = "descending";
-        base.OnInitialized();
+        await base.OnInitializedAsync();
     }
 
     /// <summary>
@@ -121,7 +122,7 @@ public partial class CreateSample : TableManager<Sample>
         // Otherwise, clear the line filter
         else if (!hasLine && !hasModel)
         {
-            this.availableModels = this.allMappings.Select(m => m.ShortDescription).Distinct().ToList();
+            this.availableModels = this.allMappings.Select(m => m.ShortDescription).Distinct().OrderBy(x => x).ToList();
         }
 
         // If model is selected, use it for filtering
@@ -137,7 +138,7 @@ public partial class CreateSample : TableManager<Sample>
         // Otherwise, clear the model filter
         else if (!hasLine && !hasModel)
         {
-            this.availableLines = this.allMappings.Select(m => m.WorkCenterCode).Distinct().ToList();
+            this.availableLines = this.allMappings.Select(m => m.WorkCenterCode).Distinct().OrderBy(x => x).ToList();
         }
 
         // Update sample numbers when model is selected
@@ -166,8 +167,8 @@ public partial class CreateSample : TableManager<Sample>
         this.errorMessage = null;
 
         // Reload available lists
-        this.availableModels = this.allMappings.Select(m => m.ShortDescription).Distinct().ToList();
-        this.availableLines = this.allMappings.Select(m => m.WorkCenterCode).Distinct().ToList();
+        this.availableModels = this.allMappings.Select(m => m.ShortDescription).Distinct().OrderBy(x => x).ToList();
+        this.availableLines = this.allMappings.Select(m => m.WorkCenterCode).Distinct().OrderBy(x => x).ToList();
     }
 
     /// <summary>

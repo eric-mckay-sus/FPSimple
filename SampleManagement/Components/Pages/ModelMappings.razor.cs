@@ -20,7 +20,8 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     /// When this page loads, wire the input provider's confirmation event to auto-open an alert (with flag).
     /// Also, set the output's OnNotify event to update the progress bar.
     /// </summary>
-    protected override void OnInitialized()
+    /// <returns>A Task representing that the page has loaded.</returns>
+    protected override async Task OnInitializedAsync()
     {
         // Link the provider events to this component's state
         this.InputProvider.OnConfirmationRequested += (prompt) =>
@@ -51,7 +52,7 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
 
         this.CurrentSortColumn = "ShortDescription";
         this.SortDir = "ascending";
-        base.OnInitialized();
+        await base.OnInitializedAsync();
     }
 
     /// <summary>

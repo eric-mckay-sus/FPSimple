@@ -227,18 +227,21 @@
                 <tbody>
                     @foreach (FileResult result in GetBatchSummary())
                     {
-                        bool hasIssue = result.hadDuplicates || result.hadErrors;
                         <tr class="@(result.hadErrors ? "table-danger-light" : result.hadDuplicates ? "table-warning-light" : "")">
                             <td class="fw-bold">@Path.GetFileName(result.file)</td>
                             <td class="fw-bold">@result.model</td>
                             <td class="text-center">
-                                @if (result.hadErrors)
+                                @if (result.alreadyUploaded)
+                                {
+                                    <Badge Color="BadgeColor.Danger">Duplicate File Skipped</Badge>
+                                }
+                                else if (result.hadErrors)
                                 {
                                     <Badge Color="BadgeColor.Danger">Error</Badge>
                                 }
                                 else if (result.hadDuplicates)
                                 {
-                                    <Badge Color="BadgeColor.Warning">Duplicates Skipped</Badge>
+                                    <Badge Color="BadgeColor.Warning">Duplicate Entries Skipped</Badge>
                                 }
                                 else
                                 {
@@ -247,7 +250,8 @@
                             </td>
                             <td class="text-center">@result.rowsUploaded</td>
                             <td>
-                                @if (result.hadErrors) { <span class="text-danger small">Check logs for details.</span> }
+                                @if (result.alreadyUploaded) { <span class="text-danger small">This file was already uploaded for this model.</span>}
+                                else if (result.hadErrors) { <span class="text-danger small">Check logs for details.</span> }
                                 else if (result.hadDuplicates) { <span class="text-muted small">Existing entries were not modified.</span> }
                                 else { <span class="text-success small">Completed successfully.</span> }
                             </td>
@@ -262,7 +266,13 @@
 @* The table shown will usually be the full FP table, but is replaced by the preview if it exists
    Empty message only appears when there's neither a preview or any data in the FP table. *@
 <div class="mt-4">
-    @if (Reporter != null && Reporter.CurrentPreview != null)
+    @if (this.IsLoading)
+    {
+        <div class="centered-container">
+            <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+        </div>
+    }
+    else if (Reporter != null && Reporter.CurrentPreview != null)
     {
         <h3>Just Uploaded</h3>
         <UniversalTable T="FoolproofPreviewRow"

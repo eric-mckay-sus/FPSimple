@@ -83,6 +83,10 @@ public class TableManager<T> : ComponentBase
 
         this.IsLoading = true;
 
+        // Tell Blazor to render the loading spinner, then give it a second (to avoid a misleading 'No data' message, even briefly)
+        this.StateHasChanged();
+        await Task.Yield();
+
         try
         {
             using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();

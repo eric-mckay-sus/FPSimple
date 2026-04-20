@@ -84,7 +84,14 @@
 </div>
 
 <div class="mt-4">
-    @if (DataView.Any())
+    @if (this.IsLoading)
+    {
+        <div class="centered-container">
+            <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+        </div>
+
+    }
+    else if (DataView.Any())
     {
         <TablePresenter T="Sample" Base="this" />
     }

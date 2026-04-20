@@ -98,10 +98,11 @@ public enum UploadResult
 /// </summary>
 /// <param name="file">The file containing the model.</param>
 /// <param name="model">The model name (from C. Core).</param>
+/// <param name="alreadyUploaded">Whether these contents were already uploaded under this model name (so the file was detected as a duplicate)</param>
 /// <param name="hadDuplicates">Whether the model upload encountered duplicates.</param>
 /// <param name="hadErrors">Whether the model upload encountered other errors.</param>
 /// <param name="rowsUploaded">The number of rows uploaded for this model.</param>
-public record FileResult(string file, string model, bool hadDuplicates, bool hadErrors, int rowsUploaded);
+public record FileResult(string file, string model, bool alreadyUploaded, bool hadDuplicates, bool hadErrors, int rowsUploaded);
 
 /// <summary>
 /// Communicates the current state of a batch upload to the Blazor layer.

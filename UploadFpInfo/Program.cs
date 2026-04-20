@@ -328,6 +328,7 @@ public class FPSheetUploader
         // Initialize flags for error detection and intention to repeat
         bool hasDuplicate = false;
         bool hasMiscError = false;
+        bool alreadyUploaded = false;
         bool applyAnotherFilter = false;
         bool isNewFile = true;
 
@@ -395,17 +396,27 @@ public class FPSheetUploader
                         }
                     }
 
-                    while (rowSkipStack.Count > 0)
+                    if (dt.Rows.Count > 0)
                     {
-                        Report current = rowSkipStack.Pop();
-                        await this.Report(current.message, current.level);
+                        while (rowSkipStack.Count > 0)
+                        {
+                            Report current = rowSkipStack.Pop();
+                            await this.Report(current.message, current.level);
+                        }
+                    }
+
+                    // If every row was duplicate, assume the file was already uploaded for this model.
+                    else
+                    {
+                        await this.Report($"This portion of {GetFileName(excelPath)} has already been uploaded under {model}, so it has been skipped.");
+                        alreadyUploaded = true;
                     }
                 }
             }
 
             // Report parse success/failure
             await this.output.ShowPreview(dt);
-            this.output.BatchResults.Add(new (excelPath, model, hasDuplicate, hasMiscError, dt.Rows.Count)); // Add a summary row by model and file
+            this.output.BatchResults.Add(new (excelPath, model, alreadyUploaded, hasDuplicate, hasMiscError, dt.Rows.Count)); // Add a summary row by model and file
 
             if (isFiltering)
             {
