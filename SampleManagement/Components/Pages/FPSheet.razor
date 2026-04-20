@@ -1,0 +1,296 @@
+﻿@page "/foolproof-sheet"
+@using UploadFpInfo
+@inherits UploadPageBase<FoolproofEntry>
+@implements IDisposable
+
+<PageTitle>Upload Foolproof Sheet</PageTitle>
+
+<h2>Upload Foolproof Sheets</h2>
+
+<p>Upload one or more foolproof dummy sample sheets here to make them available for sample generation. This tool will never overwrite/update existing data.</p>
+
+@* Staging confirmation for file selection (happens before upload) *@
+<div class="expandable-container mb-2">
+    <div class="expandable-wrapper @(selectedFiles.Any() && !IsUploading ? "is-expanded" : "")">
+        <div class="expandable-content">
+            <Alert Color="AlertColor.Info" Class="mt-3 animate-fade-in shadow-sm">
+                <p><strong>Files Selected for Upload </strong>(@selectedFiles.Count):</p>
+                <ul class="list-unstyled ms-3">
+                    @foreach (IBrowserFile file in selectedFiles)
+                    {
+                        <li>
+                            <Icon Name="IconName.FileEarmarkSpreadsheet" /> @file.Name
+                            <span class="text-muted small">(@(file.Size / 1024) KB)</span>
+                        </li>
+                    }
+                </ul>
+                <hr />
+                <div class="d-flex gap-2">
+                    <Button Color="ButtonColor.Success" @onclick='async () => await Upload("Foolproof sheets successfully uploaded")'>
+                        <Icon Name="IconName.CloudArrowUpFill" /> Proceed with Upload
+                    </Button>
+                    <Button Color="ButtonColor.Secondary" @onclick="CancelSelection">
+                        Cancel
+                    </Button>
+                </div>
+            </Alert>
+        </div>
+    </div>
+    @* File upload area and button *@
+    <div class="expandable-wrapper @(selectedFiles.Any() || IsUploading ? "" : "is-expanded")">
+        <div class="expandable-content">
+            <div class="centered-container">
+                <div class="upload-card @(IsDragging ? "drag-active" : "")">
+                    <label for="fileInput" class="upload-button">
+                        <i class="bi bi-cloud-arrow-up" style="font-size: 26px"></i> Choose Excel File
+                    </label>
+                    @* Handle the 'normal' Excel file extensions plus the full MIME types *@
+                    <InputFile id="fileInput" OnChange="HandleFileSelection" accept=".xls, .xlsx, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"" multiple="true" class="hidden-input-overlay"
+                        @ondragenter="HandleDragEnter"
+                        @ondragleave="HandleDragLeave"
+                        @ondragover="HandleDragOver"
+                        @ondrop="HandleDrop" />
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Log for errors/warnings *@
+@if (Reporter?.Logs.Any() == true)
+{
+    <div class="expandable-container">
+        <Alert Color="AlertColor.Warning" Class="mt-3 shadow-sm border-primary">
+            <div @onclick="ToggleLog" style="cursor: pointer; padding: 0.75rem 1.25rem;"
+                 class="d-flex justify-content-between align-items-center bg-warning bg-opacity-10">
+                <span>
+                    <Icon Name="@(isLogExpanded ? IconName.ChevronDown : IconName.ChevronRight)" Class="me-2" />
+                    <strong>System Logs</strong>
+                    <span class="badge bg-dark ms-2">@Reporter.Logs.Count</span>
+                </span>
+                <span class="text-muted small">Click to @(isLogExpanded ? "collapse" : "expand")</span>
+            </div>
+
+            <div class="expandable-wrapper @(isLogExpanded ? "is-expanded" : "")">
+                <div class="expandable-content">
+                    <div id="log-container" class="log-container">
+                        @foreach (Report log in Reporter.Logs)
+                        {
+                            <div class="log-entry border-bottom border-light py-1">
+                                <span class="text-muted">[@DateTime.Now.ToString("HH:mm:ss")]</span> @log.message
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </Alert>
+    </div>
+}
+
+@* Confirmation alert for any confirmation from InputProvider *@
+<div class="expandable-container">
+    <div class="expandable-wrapper @(IsAwaitingConfirmation ? "is-expanded" : "")">
+        <div class="expandable-content">
+            <Alert Color="AlertColor.Info" Class="mt-2 animate-fade-in">
+                <div class="d-flex flex-column">
+                    <label class="mb-2 fw-bold">@currentPrompt</label>
+                    <div class="me-2">
+                        <Button Color="ButtonColor.Success"
+                                Outline="true"
+                                TooltipTitle="Upload more data from this file under a different C. Core model"
+                                @onclick="() => HandleConfirm(true)">
+                            <Icon Name="IconName.ArrowRepeat" /> Repeat File
+                        </Button>
+                        <Button Color="ButtonColor.Secondary" Outline="true" @onclick="() => HandleConfirm(false)">
+                            <Icon Name="IconName.ArrowRight" /> Continue to Next
+                        </Button>
+                    </div>
+                </div>
+            </Alert>
+        </div>
+    </div>
+</div>
+
+@* Input alert for any time InputProvider requires user input *@
+<div class="expandable-container">
+    <div class="expandable-wrapper @(IsAwaitingInput ? "is-expanded" : "")">
+        <div class="expandable-content">
+            <Alert Color="AlertColor.Info" Class="mt-3 shadow-sm border-primary">
+                <div class="d-flex flex-column">
+                    <label class="mb-2 fw-bold">@currentPrompt</label>
+                    <div class="input-group me-2">
+                        <input id="model-input" type="text" list="@(IsModelPrompt ? "models" : string.Empty)"
+                            class="form-control"
+                            @bind="UserInputText"
+                            @onkeyup="@(e => { if(e.Key == "Enter") SubmitUserInput(); })"
+                            @onfocusout="@(async () => await JS.InvokeVoidAsync("focusElement", "model-input"))"
+                            placeholder="Type here..." />
+                        <Button Color="ButtonColor.Primary" @onclick="SubmitUserInput">Submit</Button>
+                    </div>
+                    <label class="text-danger">@inputError</label>
+                </div>
+                @if (IsModelPrompt)
+                {
+                    <datalist id="models">
+                        @foreach (string m in availableModels)
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </datalist>
+                    <Button Color="ButtonColor.Secondary" Outline="true" Class="mt-2" @onclick='() => SubmitUserInput("skip")'>
+                        <Icon Name="IconName.SkipForwardFill"/> Skip this file
+                    </Button>
+                } else {
+                    <div class="me-2 mt-2">
+                        <Button Color="ButtonColor.Secondary" Outline="true" @onclick='() => SubmitUserInput("r")'>
+                            <Icon Name="IconName.ArrowCounterclockwise"/> Back to Model Name
+                        </Button>
+                        <Button Color="ButtonColor.Primary" @onclick='() => SubmitUserInput(string.Empty)'>
+                            <Icon Name="IconName.Table"/> Full Sheet
+                        </Button>
+                    </div>
+                }
+            </Alert>
+        </div>
+    </div>
+</div>
+
+@* The loading bar, displayed in upload state when loading isn't yet complete *@
+@if (IsUploading && Reporter?.Progress is { } p)
+{
+    <div class="centered-container mx-auto w-100">
+        <div class="mt-3 w-50">
+            @* File counter *@
+            <div class="d-flex justify-content-between mb-1">
+                <span class="fw-semibold" style="font-size: 1.5rem">
+                    @p.CurrentFileName
+                    @if (p.IsRepeating)
+                    {
+                        <span class="badge bg-secondary ms-2">Pass @p.CurrentFilePass</span>
+                    }
+                </span>
+                <span class="text-muted">
+                    @p.FilesCompleted of @p.TotalFiles files
+                </span>
+            </div>
+
+            @* Determinate progress bar driven by file count, not percentage *@
+            <div class="progress" style="height: 20px">
+                @{ double pct = p.TotalFiles > 0
+                       ? (double)p.FilesCompleted / p.TotalFiles * 100
+                       : 0; }
+                <div class="progress-bar"
+                     role="progressbar"
+                     style="width: @((int)pct)%; transition: width 0.3s ease;"
+                     aria-valuenow="@p.FilesCompleted"
+                     aria-valuemin="0"
+                     aria-valuemax="@p.TotalFiles"
+                     aria-label="@p.FilesCompleted of @p.TotalFiles files processed">
+                    @p.FilesCompleted / @p.TotalFiles
+                </div>
+            </div>
+
+            @* Spinner only while a file is actively being processed *@
+            @if (p.FilesCompleted < p.TotalFiles)
+            {
+                <div class="d-flex align-items-center mt-2 text-muted small">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                    Processing...
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@* Batch summary - Appears after entire batch is complete *@
+@if (Reporter != null && !IsUploading && Reporter.BatchResults.Any())
+{
+    <div class="mt-4 mb-4 animate-fade-in">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3 class="text-primary"><Icon Name="IconName.CardChecklist" /> Batch Upload Summary</h3>
+            <Button Color="ButtonColor.Secondary" Outline="true" @onclick="CloseUpload">
+                <Icon Name="IconName.XCircle" /> Dismiss
+            </Button>
+        </div>
+
+        <div class="table-responsive shadow-sm rounded border">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>File Name</th>
+                        <th>Model Name</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-center">Rows Added</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (FileResult result in GetBatchSummary())
+                    {
+                        <tr class="@(result.hadErrors ? "table-danger-light" : result.hadDuplicates ? "table-warning-light" : "")">
+                            <td class="fw-bold">@Path.GetFileName(result.file)</td>
+                            <td class="fw-bold">@result.model</td>
+                            <td class="text-center">
+                                @if (result.alreadyUploaded)
+                                {
+                                    <Badge Color="BadgeColor.Danger">Duplicate File Skipped</Badge>
+                                }
+                                else if (result.hadErrors)
+                                {
+                                    <Badge Color="BadgeColor.Danger">Error</Badge>
+                                }
+                                else if (result.hadDuplicates)
+                                {
+                                    <Badge Color="BadgeColor.Warning">Duplicate Entries Skipped</Badge>
+                                }
+                                else
+                                {
+                                    <Badge Color="BadgeColor.Success">Success</Badge>
+                                }
+                            </td>
+                            <td class="text-center">@result.rowsUploaded</td>
+                            <td>
+                                @if (result.alreadyUploaded) { <span class="text-danger small">This file was already uploaded for this model.</span>}
+                                else if (result.hadErrors) { <span class="text-danger small">Check logs for details.</span> }
+                                else if (result.hadDuplicates) { <span class="text-muted small">Existing entries were not modified.</span> }
+                                else { <span class="text-success small">Completed successfully.</span> }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@* The table shown will usually be the full FP table, but is replaced by the preview if it exists
+   Empty message only appears when there's neither a preview or any data in the FP table. *@
+<div class="mt-4">
+    @if (this.IsLoading)
+    {
+        <div class="centered-container">
+            <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+        </div>
+    }
+    else if (Reporter != null && Reporter.CurrentPreview != null)
+    {
+        <h3>Just Uploaded</h3>
+        <UniversalTable T="FoolproofPreviewRow"
+                        Items="GetPreviewItems()"
+                        TotalCount="Reporter.CurrentPreview.Rows.Count"
+                        PageSize="Reporter.CurrentPreview.Rows.Count"
+                        CurrentPage="1"
+                        TotalPages="1" />
+    }
+    else if (DataView.Any())
+    {
+        <TablePresenter T="FoolproofEntry"
+                        Base="this" />
+    }
+    else
+    {
+        <div class="text-center p-5 border rounded bg-light">
+            <p class="text-muted mb-0">No foolproof sheets registered yet.</p>
+        </div>
+    }
+</div>

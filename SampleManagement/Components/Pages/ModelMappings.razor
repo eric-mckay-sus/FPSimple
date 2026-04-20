@@ -1,0 +1,85 @@
+﻿@page "/model-mappings"
+@inherits UploadPageBase<ModelLine>
+@implements IDisposable
+
+<PageTitle>Upload Model Mappings</PageTitle>
+
+<h2>Update Model Mappings</h2>
+
+<p>Upload a CSV of the C. Core export here to update the models and line names when a new model is added or an existing model moves to different lines</p>
+<Alert Color="AlertColor.Warning" Class="d-inline-block"><Icon Name="IconName.ExclamationDiamond" />
+    If successful, this will overwrite the existing model-line mappings (samples will remain unchanged, models will have no connection to their old lines)
+</Alert>
+
+<div>
+    <div class="centered-container mb-3">
+        <div class="upload-card @(IsDragging ? "drag-active" : "")">
+            <label for="fileInput" class="upload-button">
+                <i class="bi bi-cloud-arrow-up" style="font-size: 26px"></i> Choose CSV File
+            </label>
+            <InputFile id="fileInput" OnChange="HandleFileSelected" accept=".csv" class="hidden-input-overlay"
+                @ondragenter="HandleDragEnter"
+                @ondragleave="HandleDragLeave"
+                @ondragover="HandleDragOver"
+                @ondrop="HandleDrop" />
+        </div>
+    </div>
+
+    <div class="expandable-container">
+        <div class="expandable-wrapper @(IsAwaitingConfirmation ? "is-expanded" : "")">
+            <div class="expandable-content">
+                <Alert Color="AlertColor.Danger" Class="mt-3 animate-fade-in">
+                    <p>
+                        <strong>File Selected:</strong>
+                        @(selectedFile?.Name ?? "No file selected")
+                        (@((selectedFile?.Size ?? 0) / 1024) KB)</p>
+                    <Button Color="ButtonColor.Danger" @onclick="() => HandleConfirm(true)">
+                        <Icon Name="IconName.ExclamationTriangle" /> Confirm Overwrite
+                    </Button>
+                    <Button Color="ButtonColor.Secondary" @onclick="() => HandleConfirm(false)">Cancel</Button>
+                </Alert>
+            </div>
+        </div>
+    </div>
+
+    @if (IsUploading && !IsAwaitingConfirmation && DisplayPercent != 100)
+    {
+        <div class="centered-container mx-auto w-100">
+            <div class="mt-3 w-50">
+                <div class="d-flex align-items-center justify-content-center mb-2">
+                    <div class="spinner-border text-primary me-2" role="status"></div>
+                    <span>@CurrentDisplayStatus</span>
+                </div>
+                <div class="progress mt-2" style="height: 20px">
+                    <div class="progress-bar progress-bar-animated"
+                        role="progressbar"
+                        style="width: @((int)DisplayPercent)%; transition: width 0.1s linear;"
+                        aria-valuenow="@((int)DisplayPercent)"
+                        aria-valuemin="0"
+                        aria-valuemax="100">
+                        @((int)DisplayPercent)%
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<div class="mt-4">
+    @if (this.IsLoading)
+    {
+        <div class="centered-container">
+            <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+        </div>
+    }
+    else if (DataView.Any())
+    {
+        <TablePresenter T="ModelLine" Base="this" />
+    }
+    else
+    {
+        <div class="text-center p-5 border rounded bg-light">
+            <p class="text-muted mb-0">No model mappings registered yet.</p>
+        </div>
+    }
+</div>
