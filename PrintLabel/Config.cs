@@ -7,14 +7,14 @@ namespace PrintLabel;
 using StringBuilder = Microsoft.Data.SqlClient.SqlConnectionStringBuilder;
 
 /// <summary>
-/// A container for the data that is constant in UploadFpInfo (but could change).
+/// A container for the data that is constant in PrintLabel (but could change).
 /// </summary>
 internal static class Config
 {
     /// <summary>
     /// Gets or sets the program-side path to the template file to upload.
     /// </summary>
-    public static string UploadPath { get; set; } = @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample204.zpl";
+    public static string UploadPath { get; set; } = @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample203.zpl";
 
     /// <summary>
     /// Gets or sets the printer-side path to the template file to load and print.
@@ -47,7 +47,7 @@ internal static class Config
     /// <summary>
     /// Wrapper for <see cref="GetRequired"/> to get the printer IP address.
     /// </summary>
-    /// <returns>A string of the target printer IP address.</returns>
+    /// <returns>A string of the target printer's IP address.</returns>
     public static string GetPrinterIp()
     {
         return GetRequired("ZEBRA_PRINTER_IP");
