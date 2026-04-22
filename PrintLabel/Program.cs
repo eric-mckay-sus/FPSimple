@@ -5,15 +5,46 @@
 namespace PrintLabel;
 
 using System.Text;
-using Zebra.Sdk.Comm;
+using System.Net.Sockets;
 using Microsoft.Data.SqlClient;
 
-using PrintCommon;
+/// <summary>
+/// A DTO for the upload/print information required by <see cref="ZebraUploadPrint.ExecuteAsync(ZplCommand)"/>.
+/// </summary>
+public record ZplCommand
+{
+    /// <summary>
+    /// Gets or sets a value indicating whether upload mode is engaged.
+    /// </summary>
+    public bool IsUpload { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether print mode is engaged.
+    /// </summary>
+    public bool IsPrint { get; set; }
+
+    /// <summary>
+    /// Gets or sets print mode's sample ID.
+    /// </summary>
+    public int? SampleId { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the path on this machine of the ZPL file to be uploaded.
+    /// Always check <see cref="IsUpload"/> before accessing to verify validity.
+    /// </summary>
+    public string UploadPath { get; set; } = Config.UploadPath;
+
+    /// <summary>
+    /// Gets or sets the path on the printer of the ZPL file to be printed.
+    /// Always check <see cref="IsPrint"/> before accessing to verify validity.
+    /// </summary>
+    public string PrintPath { get; set; } = Config.PrintPath;
+}
 
 /// <summary>
 /// Utilizes the Zebra printer SDK to connect to a ZPL printer and upload a template or print a sample by ID.
 /// </summary>
-public class ZebraUploadPrint : IPrintService
+public class ZebraUploadPrint
 {
     /// <summary>
     /// Application entry point. Parses command-line input for mode, filename, and sample to print, then delegates to <see cref="ExecuteAsync(ZplCommand)"/> to upload/print.
@@ -108,29 +139,18 @@ public class ZebraUploadPrint : IPrintService
             }
         }
 
-        ZebraUploadPrint printObject = new ();
-
         // Use the default TCP connection
-        await printObject.ExecuteAsync(parsed);
+        await ExecuteAsync(parsed);
     }
 
     /// <summary>
-    /// Overload for <see cref="ExecuteAsync(ZplCommand, Connection)"/> that defaults to a TCP connection to the config file IP address at the default port.
+    /// Overload for <see cref="ExecuteAsync(ZplCommand, TcpClient, bool)"/> that defaults to a TCP connection to the config file IP address at the default port.
     /// </summary>
-    /// <param name="args">The arguments to pass into <see cref="ExecuteAsync(ZplCommand, Connection)"/>.</param>
+    /// <param name="args">The arguments to pass into <see cref="ExecuteAsync(ZplCommand, TcpClient, bool)"/>.</param>
     /// <returns> A Task representing that the upload/print is complete.</returns>
-    public async Task ExecuteAsync(ZplCommand args)
+    public static async Task ExecuteAsync(ZplCommand args)
     {
-        // Establish a connection with the printer regardless of command
-        TcpConnection zplConn = new (Config.GetPrinterIp(), TcpConnection.DEFAULT_ZPL_TCP_PORT);
-
-        await this.ExecuteAsync(args, zplConn);
-
-        // Close connection, if not handled by callee
-        if (zplConn.Connected)
-        {
-            zplConn.Close();
-        }
+        await ExecuteAsync(args, new TcpClient());
     }
 
     /// <summary>
@@ -138,17 +158,21 @@ public class ZebraUploadPrint : IPrintService
     /// </summary>
     /// <param name="args">The path to be uploaded to the printer's internal memory. Set to null for print-only.</param>
     /// <param name="zplConn">The path to be printed from the printer's internal memory. Set to null for upload-only.</param>
+    /// <param name="leaveOpen">Whether to leave the connection open for future use (e.g. batching).</param>
     /// <returns>A Task representing that the upload/print is complete.</returns>
-    public async Task ExecuteAsync(ZplCommand args, Connection zplConn)
+    public static async Task ExecuteAsync(ZplCommand args, TcpClient zplConn, bool leaveOpen = false)
     {
         try
         {
+            // If the client wasn't already connected to the printer, connect them now
             if (!zplConn.Connected)
             {
-                zplConn.Open();
+                await zplConn.ConnectAsync(Config.GetPrinterIp(), Config.PrinterPort);
             }
 
             string? printPathShortcut = null;
+
+            using NetworkStream stream = zplConn.GetStream();
 
             if (args.IsUpload)
             {
@@ -186,7 +210,8 @@ public class ZebraUploadPrint : IPrintService
                 }
 
                 // Send template to printer memory (execute the download command printer-side)
-                zplConn.Write(Encoding.UTF8.GetBytes(toUpload));
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(toUpload));
+
                 Console.WriteLine("Upload successful!");
             }
 
@@ -218,18 +243,23 @@ public class ZebraUploadPrint : IPrintService
 
                 sb.Append("^XZ");
 
-                zplConn.Write(Encoding.UTF8.GetBytes(sb.ToString()));
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(sb.ToString()));
+
                 Console.WriteLine("Sent print command to printer. Print should begin shortly.");
             }
         }
-        catch (ConnectionException e)
+        catch (SocketException e)
         {
-            Console.WriteLine($"Printer Error: {e.Message}");
+            Console.WriteLine($"Error connecting to printer: {e.Message}");
+        }
+        catch (IOException e)
+        {
+            Console.WriteLine($"Error executing the print command: {e.Message}");
         }
         finally
         {
             // In case the connection opening caused the exception
-            if (zplConn.Connected)
+            if (!leaveOpen && zplConn.Connected)
             {
                 zplConn.Close();
             }

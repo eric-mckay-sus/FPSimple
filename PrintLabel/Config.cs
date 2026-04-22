@@ -2,14 +2,14 @@
 // Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
 // </copyright>
 
-namespace PrintCommon;
+namespace PrintLabel;
 
 using StringBuilder = Microsoft.Data.SqlClient.SqlConnectionStringBuilder;
 
 /// <summary>
 /// A container for the data that is constant in PrintLabel (but could change).
 /// </summary>
-public static class Config
+internal static class Config
 {
     /// <summary>
     /// Gets or sets the program-side path to the template file to upload.
@@ -25,6 +25,11 @@ public static class Config
     /// Gets the safe size limit for a ZPL file (RAM precaution).
     /// </summary>
     public static int KbLimit { get; } = 20;
+
+    /// <summary>
+    /// Gets the port through which the printer should be accessed.
+    /// </summary>
+    public static int PrinterPort { get; } = 9100;
 
     /// <summary>
     /// Gets the connection string for the database whose credentials are stored in environment variables.
