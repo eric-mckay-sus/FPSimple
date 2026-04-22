@@ -136,6 +136,7 @@ public class Sample
     /// Gets or sets the unique sample identifier.
     /// </summary>
     [Column("sampleID")]
+    [Verbose]
     public int SampleID { get; set; }
 
     /// <summary>
@@ -190,36 +191,42 @@ public class Sample
     /// Gets or sets the creator name for this sample.
     /// </summary>
     [Column("creatorName")]
+    [Verbose]
     public required string CreatorName { get; set; }
 
     /// <summary>
     /// Gets or sets the approver name for this sample.
     /// </summary>
     [Column("approverName")]
+    [Verbose]
     public string? ApproverName { get; set; }
 
     /// <summary>
     /// Gets or sets the approval date for this sample.
     /// </summary>
     [Column("approvalDate")]
+    [Verbose]
     public DateOnly? ApprovalDate { get; set; }
 
     /// <summary>
     /// Gets or sets the expiration date for this sample.
     /// </summary>
     [Column("expirationDate")]
+    [Verbose]
     public DateOnly? ExpirationDate { get; set; }
 
     /// <summary>
     /// Gets or sets the last run time for this sample.
     /// </summary>
     [Column("lastRunTime")]
+    [Verbose]
     public DateTime? LastRunTime { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether this sample is active.
     /// </summary>
     [Column("isActive")]
+    [Verbose]
     public bool IsActive { get; set; }
 }
 

@@ -50,12 +50,13 @@
         <table class="table res-table table-striped text-nowrap">
             <thead>
                 <tr>
-                    @foreach (var prop in _cachedProps)
+                    @foreach (var prop in GetVisibleProperties())
                     {
                         var attribute = prop.GetCustomAttribute<ColumnAttribute>();
-                        var displayName = attribute?.Name ?? prop.Name;
+                        string displayName = attribute?.Name ?? prop.Name;
+                        bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
                         <th @onclick="() => OnSort.InvokeAsync(prop.Name)"
-                        class="col-@prop.Name"
+                        class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (_isExpanded ? "verbose-visible" : "verbose-hidden") : "")"
                         style=@(OnSort.HasDelegate ? "cursor:pointer" : "cursor:auto")
                         title=@(OnSort.HasDelegate ? $"Toggle sort for {displayName}" : "")>
                             @displayName @SortIcon(prop.Name)
@@ -71,16 +72,24 @@
                     <tr @key="item"
                         @onclick="() => _attentionItem=_attentionItem?.Equals(item) == true ? default : item"
                         class="@GetRowClass(item)">
-                        @foreach (var prop in _cachedProps)
+                        @foreach (var prop in GetVisibleProperties())
                         {
-                            <td class="col-@prop.Name">@(prop.GetValue(item)?.ToString() ?? "—")</td>
+                            bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
+                            <td class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (_isExpanded ? "verbose-visible" : "verbose-hidden") : "")">@(prop.GetValue(item)?.ToString() ?? "—")</td>
                         }
                         @if (OnExpand.HasDelegate || OnPrint.HasDelegate) {
                             <td>
                                 @* Only show the expand button if there's an expand binding *@
                                 @if (OnExpand.HasDelegate){
-                                    <button class="btn btn-link btn-action p-0 text-secondary" @onclick="() => OnExpand.InvokeAsync(item)" title="Expand">
-                                        <Icon Name="IconName.List" Size="IconSize.x4" />
+                                    <button class="btn btn-link btn-action p-0 text-secondary" @onclick="async () => { _isExpanded = !_isExpanded; await OnExpand.InvokeAsync(item); }" title="Expand">
+                                        @if (_isExpanded)
+                                        {
+                                            <Icon Name="IconName.ArrowsCollapseVertical" Size="IconSize.x4" />
+                                        }
+                                        else
+                                        {
+                                            <Icon Name="IconName.ArrowsExpandVertical" Size="IconSize.x4" />
+                                        }
                                     </button>
                                 }
                                 @* Only show the delete button if there's a delete binding *@
@@ -106,6 +115,8 @@
     [Parameter] public T? Target { get; set; } // The row to highlight (its information is shown)
     private T? _attentionItem { get; set; } // Allows the user to highlight a row for focus (no information shown)
     [Parameter] public string? TargetStyle { get; set; } // The highlight style for the target row
+    private bool _isExpanded { get; set; } = false; // Tracks whether the table is in expanded view
+
     private string GetRowClass(T item)
     {
         if (item == null) return "";
@@ -123,6 +134,22 @@
 
     // A cache of the properties of T so it's not invoked for each header, excluding those marked NotDisplayed
     private PropertyInfo[] _cachedProps = typeof(T).GetProperties().Where(p => p.GetCustomAttribute<NotDisplayedAttribute>() == null).ToArray();
+
+    /// <summary>
+    /// Gets the properties to display based on expansion state.
+    /// Verbose properties are only shown when _isExpanded is true.
+    /// If there's no OnExpand binding, Verbose columns remain permanently hidden.
+    /// </summary>
+    private PropertyInfo[] GetVisibleProperties()
+    {
+        // If expanded (and OnExpand is bound), show all columns; otherwise, hide Verbose columns
+        if (OnExpand.HasDelegate && _isExpanded)
+        {
+            return _cachedProps;
+        }
+
+        return _cachedProps.Where(p => p.GetCustomAttribute<VerboseAttribute>() == null).ToArray();
+    }
 
     // Sorting & staleness
     [Parameter] public EventCallback<string> OnSort { get; set; } // Handles everything related to sorting
