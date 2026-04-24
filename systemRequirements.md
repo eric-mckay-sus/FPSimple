@@ -62,9 +62,10 @@ Use TCP for both upload and print
 
 Literal approval does not touch the DB (in-person, approver must physically sign label)
 
-- Later, approver documents a sample as approved using new SP via form
-  - New SP (AuthorizeSample) sets isActive bit and assigns approval info
 - Blazor page is a view of Samples filtering out entries without approval info (can't use isActive bit bc that includes outdated)
+- Option to approve sample per row
+- After signing off on sample, approver documents it as approved via form that opens on approve action
+  - New SP (AuthorizeSample) sets isActive bit and assigns approval info
 - Track approver number in DB instead of name
 
 ### Sample remake
