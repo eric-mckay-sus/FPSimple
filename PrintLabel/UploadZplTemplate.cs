@@ -30,6 +30,11 @@ public partial class ZebraUploadPrint
             error = null; // Don't persist error from last iteration
             potentialUploadPath = await this.input.GetInputAsync(new ("Please enter the filename of the template ZPL to upload (or just press ENTER to use the config file default): "), error);
 
+            if (potentialUploadPath.Equals(string.Empty))
+            {
+                break;
+            }
+
             // Set error message if applicable (cheapest check first, first hit holds)
             if (!Path.GetExtension(potentialUploadPath).Equals(".zpl"))
             {
@@ -39,6 +44,8 @@ public partial class ZebraUploadPrint
             {
                 error = $"File '{potentialUploadPath}' was not found on this computer. Please try again.";
             }
+
+            await this.Report(error ?? "Pretend problem", ReportLevel.ERROR);
         }
         while (error != null);
 

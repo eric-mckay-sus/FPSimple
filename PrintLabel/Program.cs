@@ -112,7 +112,11 @@ public partial class ZebraUploadPrint
         }
 
         // Use the default TCP connection
-        await this.ExecuteAsync(zplCmd);
+        // Only attempt if the user didn't decline both
+        if (zplCmd.IsUpload || zplCmd.IsPrint)
+        {
+            await this.ExecuteAsync(zplCmd);
+        }
     }
 
     /// <summary>
