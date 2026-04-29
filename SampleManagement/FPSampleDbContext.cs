@@ -215,16 +215,16 @@ public class Sample
     /// <summary>
     /// Gets or sets the creator name for this sample.
     /// </summary>
-    [Column("creatorName")]
+    [Column("creatorNum")]
     [Verbose]
-    public required string CreatorName { get; set; }
+    public required string CreatorNum { get; set; }
 
     /// <summary>
     /// Gets or sets the approver name for this sample.
     /// </summary>
-    [Column("approverName")]
+    [Column("approverNum")]
     [Verbose]
-    public string? ApproverName { get; set; }
+    public string? ApproverNum { get; set; }
 
     /// <summary>
     /// Gets or sets the approval date for this sample.

@@ -53,6 +53,11 @@ public partial class ZebraUploadPrint
             error = null; // Don't persist error from last iteration or from sample ID prompt
             potentialPrintPath = await this.input.GetInputAsync(new ("Please enter the filename of the template ZPL to print (or just press ENTER to use the config file default): "), error);
 
+            if (potentialPrintPath.Equals(string.Empty))
+            {
+                break;
+            }
+
             // Set error message if applicable (first one holds)
             if (!Path.GetExtension(potentialPrintPath).Equals(".zpl"))
             {
@@ -163,7 +168,7 @@ public partial class ZebraUploadPrint
             SELECT
                 dummySampleNum, model, rank,
                 workCenterCode, iteration, creationDate,
-                failureMode, location, creatorName
+                failureMode, location, creatorNum
             FROM Samples
             WHERE sampleID = @id";
 
@@ -188,7 +193,7 @@ public partial class ZebraUploadPrint
                     fieldMap.Add(7,  Format(((DateTime)reader["creationDate"]).ToString("MM/dd/yyyy")));
                     fieldMap.Add(8,  Format(reader["failureMode"]));
                     fieldMap.Add(9,  Format(reader["location"]));
-                    fieldMap.Add(10, Format(reader["creatorName"]));
+                    fieldMap.Add(10, Format(reader["creatorNum"]));
                 }
             }
         }

@@ -237,7 +237,7 @@ public partial class CreateSample : TableManager<Sample>
                 @model = {this.formData.Model},
                 @workCenterCode = {this.formData.WorkCenterCode},
                 @dummySampleNum = {this.formData.DummySampleNum},
-                @creatorName = {this.formData.CreatorName}");
+                @creatorNum = {this.formData.CreatorNum}");
 
             this.formData = new (); // Reset form
             await this.RefreshData();
@@ -396,6 +396,6 @@ public partial class CreateSample : TableManager<Sample>
         /// <summary>
         /// Gets or sets the new sample's creator name.
         /// </summary>
-        public string CreatorName { get; set; } = string.Empty;
+        public string CreatorNum { get; set; } = string.Empty;
     }
 }
