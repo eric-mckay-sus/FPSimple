@@ -135,7 +135,7 @@ public class ModelMappingUploader
         string path = Config.GetInputLocation(isFP: false);
         if (string.IsNullOrWhiteSpace(filename))
         {
-            await this.Report($"No file specified. Defaulting to config file input location ({path})\n");
+            await this.Report($"No file specified. Defaulting to config file input location ({path}).\n");
         }
         else
         {
@@ -155,11 +155,9 @@ public class ModelMappingUploader
             }
             else if (!Path.GetExtension(path).Equals(".csv", StringComparison.OrdinalIgnoreCase))
             {
-                await this.Report($"The file you specified ({path}) is not a CSV. Please select a CSV file and try again.", ReportLevel.ERROR);
+                await this.Report($"The file you specified ({path}) is not a CSV. Please select a CSV file and try again.\n", ReportLevel.ERROR);
                 return UploadResult.ErroredOut;
             }
-
-            string connectionString = Config.GetConnectionString();
 
             bool confirmOverwrite = await this.input.GetConfirmAsync(new ($"WARNING: If successful, this action will overwrite the current model info database with the contents of {path}. Proceed?", ReportLevel.WARNING));
             if (!confirmOverwrite)
@@ -167,12 +165,12 @@ public class ModelMappingUploader
                 return UploadResult.Canceled;
             }
 
-            await this.Upload(path, connectionString);
+            await this.Upload(path, Config.GetConnectionString());
             return UploadResult.Complete;
         }
         catch (Exception ex)
         {
-            await this.Report($"Fatal error: {ex.Message}", ReportLevel.ERROR);
+            await this.Report($"Fatal error: {ex.Message}\n", ReportLevel.ERROR);
             return UploadResult.ErroredOut;
         }
     }
@@ -212,7 +210,7 @@ public class ModelMappingUploader
             // This looks like RBAR, but it's really just an abstraction
             await bulkCopy.WriteToServerAsync(dr);
             await transaction.CommitAsync();
-            await this.Report("Complete!", ReportLevel.SUCCESS);
+            await this.Report("Complete!\n", ReportLevel.SUCCESS);
         }
         catch (Exception ex)
         {
