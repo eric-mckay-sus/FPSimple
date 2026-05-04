@@ -58,15 +58,15 @@ public partial class ZebraUploadPrint
                 break;
             }
 
-            // Set error message if applicable (first one holds)
-            if (!Path.GetExtension(potentialPrintPath).Equals(".zpl"))
-            {
-                error = $"File {potentialPrintPath} is not a ZPL file. Please try again";
-            }
-            else if (!(potentialPrintPath.StartsWith("R:") || potentialPrintPath.StartsWith("E:")))
-            {
-                error = $"File '{potentialPrintPath}' must be on the R or E drive. Please try again.";
-            }
+            // // Set error message if applicable (first one holds)
+            // if (!Path.GetExtension(potentialPrintPath).Equals(".zpl"))
+            // {
+            //     error = $"File {potentialPrintPath} is not a ZPL file. Please try again";
+            // }
+            // else if (!(potentialPrintPath.StartsWith("R:") || potentialPrintPath.StartsWith("E:")))
+            // {
+            //     error = $"File '{potentialPrintPath}' must be on the R or E drive. Please try again.";
+            // }
         }
         while (error != null);
 
@@ -181,7 +181,7 @@ public partial class ZebraUploadPrint
                 if (await reader.ReadAsync())
                 {
                     // Helper to format strings with the ZPL centering suffix
-                    static string Format(object value) => $"{value?.ToString() ?? string.Empty}\\&";
+                    static string Format(object value) => $"{value?.ToString() ?? string.Empty}";
 
                     // Map database columns to ZPL ^FN indices
                     fieldMap.Add(1,  Format(reader["dummySampleNum"]));

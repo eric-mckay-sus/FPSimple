@@ -213,18 +213,18 @@ public class Sample
     public required string Location { get; set; }
 
     /// <summary>
-    /// Gets or sets the creator name for this sample.
+    /// Gets or sets the creator associate number for this sample.
     /// </summary>
     [Column("creatorNum")]
     [Verbose]
-    public required string CreatorNum { get; set; }
+    public int CreatorNum { get; set; }
 
     /// <summary>
-    /// Gets or sets the approver name for this sample.
+    /// Gets or sets the approver associate number for this sample.
     /// </summary>
     [Column("approverNum")]
     [Verbose]
-    public string? ApproverNum { get; set; }
+    public int? ApproverNum { get; set; }
 
     /// <summary>
     /// Gets or sets the approval date for this sample.

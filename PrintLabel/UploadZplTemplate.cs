@@ -44,8 +44,6 @@ public partial class ZebraUploadPrint
             {
                 error = $"File '{potentialUploadPath}' was not found on this computer. Please try again.";
             }
-
-            await this.Report(error ?? "Pretend problem", ReportLevel.ERROR);
         }
         while (error != null);
 
