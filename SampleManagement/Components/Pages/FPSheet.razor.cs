@@ -129,7 +129,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
             }
         };
 
-        using (FPSampleDbContext context = this.DbFactory.CreateDbContext())
+        using (FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync())
         {
             this.availableModels = await context.ModelToLine.Select(m => m.ShortDescription).Distinct().ToListAsync();
         }

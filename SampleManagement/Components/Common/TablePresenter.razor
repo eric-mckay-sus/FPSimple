@@ -14,7 +14,8 @@
     PrintModeEngaged="PrintModeEngaged"
     SelectedForPrint="SelectedForPrint"
     SelectedForPrintChanged="SelectedForPrintChanged"
-    OnExpand="OnExpand" />
+    OnExpand="OnExpand"
+    OnApprove="OnApprove" />
 
 @code{
     [Parameter, EditorRequired]
@@ -25,4 +26,5 @@
     [Parameter] public List<T> SelectedForPrint { get; set; } = [];
     [Parameter] public EventCallback<List<T>> SelectedForPrintChanged { get; set; }
     [Parameter] public EventCallback<T> OnExpand { get; set; }
+    [Parameter] public EventCallback<T> OnApprove { get; set; }
 }

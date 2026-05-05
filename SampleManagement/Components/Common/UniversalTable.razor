@@ -61,8 +61,8 @@
                         @displayName @SortIcon(prop.Name)
                     </th>
                 }
-                    @if (OnPrint.HasDelegate || OnExpand.HasDelegate){
-                    <th>Actions</th> @* For the expand and print buttons *@
+                    @if (this.showActions){
+                    <th>Actions</th> @* For the expand, print, and approve buttons *@
                 }
             </tr>
         </thead>
@@ -76,7 +76,7 @@
                         bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
                         <td class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (_isExpanded ? "verbose-visible" : "verbose-hidden") : "")">@(prop.GetValue(item)?.ToString() ?? "—")</td>
                     }
-                    @if (OnExpand.HasDelegate || OnPrint.HasDelegate) {
+                    @if (this.showActions) {
                         <td>
                             @* Only show the expand button if there's an expand binding and we're not in print select mode *@
                             @if (OnExpand.HasDelegate && !PrintModeEngaged){
@@ -109,6 +109,11 @@
                                     </button>
                                 }
                             }
+                            @if (OnApprove.HasDelegate){
+                                <button class="btn btn-link btn-action p-0 text-secondary me-2" @onclick="async () => await OnApprove.InvokeAsync(item)" title="Approve">
+                                    <Icon Name="IconName.Check" Size="IconSize.x4" />
+                                </button>
+                            }
                         </td>
                     }
                 </tr>
@@ -125,6 +130,7 @@
     private T? _attentionItem { get; set; } // Allows the user to highlight a row for focus (no information shown)
     [Parameter] public string? TargetStyle { get; set; } // The highlight style for the target row
     private bool _isExpanded { get; set; } = false; // Tracks whether the table is in expanded view
+    private bool showActions => this.OnExpand.HasDelegate || this.OnPrint.HasDelegate || this.OnApprove.HasDelegate;
 
     private string GetRowClass(T item)
     {

@@ -106,7 +106,7 @@ public partial class CreateSample : TableManager<Sample>
     /// <returns>A Task representing that data has been successfully refreshed.</returns>
     public override async Task RefreshData(bool keepPage = false)
     {
-        using FPSampleDbContext context = this.DbFactory.CreateDbContext();
+        using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
 
         // Fetch the mapping table once to handle bidirectional filtering in memory
         this.allMappings = await context.ModelToLine.ToListAsync();
@@ -139,7 +139,7 @@ public partial class CreateSample : TableManager<Sample>
     /// <returns>A Task representing that filters have been refreshed.</returns>
     private async Task RefreshFilters()
     {
-        using FPSampleDbContext context = this.DbFactory.CreateDbContext();
+        using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
 
         // Normalize inputs to handle casing and extra whitespace
         string searchModel = this.formData.Model.Trim();
@@ -229,7 +229,7 @@ public partial class CreateSample : TableManager<Sample>
 
         try
         {
-            using FPSampleDbContext context = this.DbFactory.CreateDbContext();
+            using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
 
             // ExecuteSqlInterpolatedAsync internally wraps each parameter in an injection-safe DbParameter
             await context.Database.ExecuteSqlInterpolatedAsync($@"
@@ -261,7 +261,7 @@ public partial class CreateSample : TableManager<Sample>
         this.isPrinting = true;
         try
         {
-            ZplCommand cmd = new () { IsPrint = true, SampleId = sample.SampleID };
+            ZplCommand cmd = new () { SampleId = sample.SampleID };
             ZebraUploadPrint zupObject = new (this.InputProvider, this.Reporter);
             Report statusReport = await zupObject.ExecuteAsync(cmd);
             if (statusReport.level == ReportLevel.SUCCESS)
@@ -305,7 +305,7 @@ public partial class CreateSample : TableManager<Sample>
                 this.printCts.Token.ThrowIfCancellationRequested();
 
                 // Create a print request for each sample
-                ZplCommand cmd = new () { IsPrint = true, SampleId = sample.SampleID };
+                ZplCommand cmd = new () { SampleId = sample.SampleID };
                 ZebraUploadPrint zupObject = new (this.InputProvider, this.Reporter);
                 Report statusReport = await zupObject.ExecuteAsync(cmd, conn, leaveOpen: true);
                 if (statusReport.level == ReportLevel.SUCCESS)
