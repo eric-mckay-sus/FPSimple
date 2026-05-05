@@ -20,8 +20,15 @@ public class ConsoleInputProvider : IInputProvider
     /// <returns>A Task containing the command line input.</returns>
     public async Task<string> GetInputAsync(Report prompt, string? previousError = null)
     {
+        // If there was an error, show that first
+        if (previousError != null)
+        {
+            Console.WriteLine(new Report(previousError, ReportLevel.ERROR).ToAnsiString());
+        }
+
+        // Always show the prompt (with proper formatting)
         Console.WriteLine(prompt.ToAnsiString());
-        Console.Write('\t');
+        Console.Write('\t'); // Tab to visually "attach" response area to prompt
         return await Task.Run(() => Console.ReadLine() ?? string.Empty);
     }
 

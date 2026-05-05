@@ -119,7 +119,6 @@
 
 @code {
     [Parameter] public IEnumerable<T>? Items { get; set; } // The data to display
-    [Parameter] public EventCallback<T> OnPrint { get; set; } // The action to bind to the print button being pressed
     [Parameter] public EventCallback<T> OnExpand { get; set; } // The action to bind to the expand button being pressed
 
     [Parameter] public T? Target { get; set; } // The row to highlight (its information is shown)
@@ -161,10 +160,13 @@
         return _cachedProps.Where(p => p.GetCustomAttribute<VerboseAttribute>() == null).ToArray();
     }
 
-    // Sorting & printing
+    // Sorting
     [Parameter] public EventCallback<string> OnSort { get; set; } // Handles everything related to sorting
     [Parameter] public Func<string, string> GetSortIcon { get; set; } = (col) => "";
     private string SortIcon(string col) => GetSortIcon?.Invoke(col) ?? "";
+
+    // Printing
+    [Parameter] public EventCallback<T> OnPrint { get; set; } // The action to bind to the print button being pressed
     [Parameter] public bool PrintModeEngaged { get; set; } = false;
     [Parameter] public List<T> SelectedForPrint { get; set; } = [];
     [Parameter] public EventCallback<List<T>> SelectedForPrintChanged { get; set; }
@@ -192,6 +194,9 @@
         // SelectedForPrint gets updated with updatedList as a parameter
         await SelectedForPrintChanged.InvokeAsync(updatedList);
     }
+
+    // Approval
+    [Parameter] public EventCallback<T> OnApprove { get; set; } // The action to bind to approval
 
     // Pagination Params
     [Parameter] public int CurrentPage { get; set; }

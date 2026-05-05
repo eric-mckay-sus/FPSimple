@@ -29,9 +29,28 @@ public class FPSampleDbContext(DbContextOptions<FPSampleDbContext> options) : Db
     public DbSet<Sample> Samples { get; set; }
 
     /// <summary>
+    /// Gets or sets the unapproved samples table (for display in the sample approval page).
+    /// </summary>
+    public DbSet<UnapprovedSample> UnapprovedSamples { get; set; }
+
+    /// <summary>
     /// Gets or sets the associate information table.
     /// </summary>
     public DbSet<Associate> AssociateInfo { get; set; }
+
+    /// <summary>
+    /// Explicitly mapps UnapprovedSample to UnapprovedSample and Sample to Samples.
+    /// EF Core's diff is strict.
+    /// </summary>
+    /// <param name="modelBuilder"><inheritdoc/></param>
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        // Map the base class to the table
+        modelBuilder.Entity<Sample>().ToTable("Samples");
+
+        // Map the inherited class to the view
+        modelBuilder.Entity<UnapprovedSample>().ToView("UnapprovedSamples");
+    }
 }
 
 /// <summary>
@@ -127,6 +146,13 @@ public class ModelLine
 }
 
 /// <summary>
+/// Wrapper class for use with the unapproved samples view (EF Core compliance).
+/// </summary>
+public class UnapprovedSample : Sample
+{
+}
+
+/// <summary>
 /// Represents a sample record in the database.
 /// </summary>
 [PrimaryKey(nameof(SampleID))]
@@ -187,18 +213,18 @@ public class Sample
     public required string Location { get; set; }
 
     /// <summary>
-    /// Gets or sets the creator name for this sample.
+    /// Gets or sets the creator associate number for this sample.
     /// </summary>
-    [Column("creatorName")]
+    [Column("creatorNum")]
     [Verbose]
-    public required string CreatorName { get; set; }
+    public int CreatorNum { get; set; }
 
     /// <summary>
-    /// Gets or sets the approver name for this sample.
+    /// Gets or sets the approver associate number for this sample.
     /// </summary>
-    [Column("approverName")]
+    [Column("approverNum")]
     [Verbose]
-    public string? ApproverName { get; set; }
+    public int? ApproverNum { get; set; }
 
     /// <summary>
     /// Gets or sets the approval date for this sample.
@@ -229,7 +255,7 @@ public class Sample
     public bool IsActive { get; set; }
 
     /// <summary>
-    /// Associates are equal if they share the same badge number.
+    /// Samples are equal if they share the same sample ID.
     /// </summary>
     /// <param name="obj">The object to compare.</param>
     /// <returns>True when the objects represent the same associate.</returns>
@@ -244,15 +270,15 @@ public class Sample
     }
 
     /// <summary>
-    /// Gets the hash code for this associate.
+    /// Gets the hash code for this sample.
     /// </summary>
-    /// <returns>The associate's hash code.</returns>
+    /// <returns>The sample's hash code.</returns>
     public override int GetHashCode() => this.SampleID.GetHashCode();
 
     /// <summary>
-    /// Returns a descriptive string representation of this associate.
+    /// Returns a descriptive string representation of this sample.
     /// </summary>
-    /// <returns>The associate description.</returns>
+    /// <returns>The sample description.</returns>
     public override string ToString()
     {
         return $"ID: {this.SampleID}, Sample #: {this.DummySampleNum}, Model: {this.Model}, Line: {this.Line}";

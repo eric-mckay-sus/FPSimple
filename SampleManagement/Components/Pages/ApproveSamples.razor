@@ -1,6 +1,30 @@
 ﻿@page "/approve-samples"
 @attribute [Authorize(Roles = "Admin")]
+@inherits TableManager<UnapprovedSample>
 
 <PageTitle>Approve Samples</PageTitle>
 
-<h2>Sample approval will show all the samples that haven't been approved and provide an option to expand each one to view details/approve</h2>
+<h2>Sample Approval</h2>
+
+<div class="mt-4">
+    @if (this.IsLoading)
+    {
+        <div class="centered-container">
+            <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+        </div>
+
+    }
+    else if (DataView.Any())
+    {
+        @* Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button *@
+        <TablePresenter T="UnapprovedSample"
+                        Base="this"
+                        OnExpand="() => {}" />
+    }
+    else
+    {
+        <div class="text-center p-5 border rounded bg-light">
+            <p class="text-muted mb-0">No samples registered yet.</p>
+        </div>
+    }
+</div>

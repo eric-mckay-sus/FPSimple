@@ -52,8 +52,8 @@
 
                         <div class="col-md-8">
                             <label class="form-label">Associate Signature</label>
-                            <input @bind="formData.CreatorName" class="form-control"
-                                    placeholder=@(NotReadyForSignature ? "Please enter model, line, and dummy sample # first" : "Enter the name on your badge")
+                            <input @bind="formData.CreatorNum" class="form-control"
+                                    placeholder=@(NotReadyForSignature ? "Please enter model, line, and dummy sample # first" : "Enter your associate number")
                                     disabled=@NotReadyForSignature />
                         </div>
                     </div>
