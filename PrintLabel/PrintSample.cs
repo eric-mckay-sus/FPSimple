@@ -27,7 +27,7 @@ public partial class ZebraUploadPrint
         do
         {
             error = null; // Don't persist error from last iteration or from upload path prompt
-            idString = await this.input.GetInputAsync(new ("Please enter sample ID to be printed"), error);
+            idString = await this.input.GetInputAsync(new ("Please enter the ID of the sample to be printed"), error);
 
             // Set error message if applicable (cheapest check first, first hit holds)
             if (!int.TryParse(idString, out sampleId))
@@ -47,34 +47,31 @@ public partial class ZebraUploadPrint
 
         // TODO want to ask for explicit filepath from console, but offer file input to Blazor. New method in IInputProvider?
         // User probably wants to stick with the config file option for print the majority of the time; how to lean toward that?
-        string potentialPrintPath;
+        string potentialTemplatePath;
         do
         {
             error = null; // Don't persist error from last iteration or from sample ID prompt
-            potentialPrintPath = await this.input.GetInputAsync(new ("Please enter the filename of the template ZPL to print (or just press ENTER to use the config file default): "), error);
+            potentialTemplatePath = await this.input.GetInputAsync(new ("Please enter the filename of the template ZPL to print (or just press ENTER to use the config file default): "), error);
 
-            if (potentialPrintPath.Equals(string.Empty))
+            // Leave on default and end prompting immediately on empty input
+            if (potentialTemplatePath.Equals(string.Empty))
             {
-                break;
+                return;
             }
 
-            // // Set error message if applicable (first one holds)
-            // if (!Path.GetExtension(potentialPrintPath).Equals(".zpl"))
-            // {
-            //     error = $"File {potentialPrintPath} is not a ZPL file. Please try again";
-            // }
-            // else if (!(potentialPrintPath.StartsWith("R:") || potentialPrintPath.StartsWith("E:")))
-            // {
-            //     error = $"File '{potentialPrintPath}' must be on the R or E drive. Please try again.";
-            // }
+            // Set error message if applicable (first one holds)
+            if (!Path.GetExtension(potentialTemplatePath).Equals(".zpl"))
+            {
+                error = $"File {potentialTemplatePath} is not a ZPL file. Please try again";
+            }
+            else if (!File.Exists(potentialTemplatePath))
+            {
+                error = $"File '{potentialTemplatePath}' was not found on this computer. Please try again.";
+            }
         }
         while (error != null);
 
-        // Leave on default if empty
-        if (!string.IsNullOrWhiteSpace(potentialPrintPath))
-        {
-            printCmd.PrintPath = potentialPrintPath;
-        }
+        printCmd.TemplatePath = potentialTemplatePath;
     }
 
     /// <summary>
@@ -85,7 +82,7 @@ public partial class ZebraUploadPrint
     /// <returns>A Task representing that the print command has been issued (or been terminated).</returns>
     public async Task PrintAsync(ZplCommand printCmd, NetworkStream stream)
     {
-        Dictionary<int, string> fields;
+        string[] fields;
 
         using (SqlConnection sqlConn = new (Config.GetConnectionString()))
         {
@@ -94,23 +91,27 @@ public partial class ZebraUploadPrint
         }
 
         // SampleMapFromId only returns empty when the sample ID couldn't be found
-        if (fields.Count == 0)
+        // Could technically perform an existence check beforehand, but this is equivalent and requires 1 fewer DB hit
+        if (fields.Length == 0)
         {
             await this.Report($"{printCmd.SampleId} is not the ID of a sample in the database. Cancelling print...");
+            return;
         }
 
-        StringBuilder sb = new ();
+        FileInfo templateInfo = new (printCmd.TemplatePath);
+        int kbSize = Convert.ToInt32(templateInfo.Length / 1024);
 
-        // Recall and print
-        sb.Append($"^XA^XF{printCmd.PrintPath}");
-        foreach (KeyValuePair<int, string> entry in fields)
+        if (kbSize > Config.KbLimit)
         {
-            sb.Append($"^FN{entry.Key}^FD{entry.Value}^FS");
+            await this.Report($"{printCmd.TemplatePath} exceeds the size limit of {Config.KbLimit}KB. Canceling upload...", ReportLevel.ERROR);
+            return;
         }
 
-        sb.Append("^XZ");
+        string toUpload = File.ReadAllText(printCmd.TemplatePath);
+        toUpload = string.Format(toUpload, fields);
 
-        await stream.WriteAsync(Encoding.UTF8.GetBytes(sb.ToString()));
+        // Stream loaded template to printer (printer executes immediately)
+        await stream.WriteAsync(Encoding.UTF8.GetBytes(toUpload));
 
         await this.Report("Sent print command to printer. Print should begin shortly.", ReportLevel.SUCCESS);
     }
@@ -149,7 +150,7 @@ public partial class ZebraUploadPrint
     /// <param name="id">The sample serial number.</param>
     /// <param name="conn">The connection to the SQL database.</param>
     /// <returns>A dictionary mapping field numbers (for the ZPL template) to field data (from the database).</returns>
-    private static async Task<Dictionary<int, string>> SampleMapFromId(int? id, SqlConnection conn)
+    private static async Task<string[]> SampleMapFromId(int? id, SqlConnection conn)
     {
         if (id == null)
         {
@@ -161,7 +162,7 @@ public partial class ZebraUploadPrint
             await conn.OpenAsync();
         }
 
-        var fieldMap = new Dictionary<int, string>();
+        string[] fields = new string[10];
 
         // Define the query to pull fields required by the ZPL template
         string query = @"
@@ -180,24 +181,24 @@ public partial class ZebraUploadPrint
             {
                 if (await reader.ReadAsync())
                 {
-                    // Helper to format strings with the ZPL centering suffix
-                    static string Format(object value) => $"{value?.ToString() ?? string.Empty}";
+                    // Helper to cast nulls to the empty string
+                    static string NullToEmpty(object value) => value?.ToString() ?? string.Empty;
 
-                    // Map database columns to ZPL ^FN indices
-                    fieldMap.Add(1,  Format(reader["dummySampleNum"]));
-                    fieldMap.Add(2,  Format(reader["model"]));
-                    fieldMap.Add(3,  Format(reader["rank"]));
-                    fieldMap.Add(4,  Format(id));
-                    fieldMap.Add(5,  Format(reader["workCenterCode"]));
-                    fieldMap.Add(6,  Format(reader["iteration"]));
-                    fieldMap.Add(7,  Format(((DateTime)reader["creationDate"]).ToString("MM/dd/yyyy")));
-                    fieldMap.Add(8,  Format(reader["failureMode"]));
-                    fieldMap.Add(9,  Format(reader["location"]));
-                    fieldMap.Add(10, Format(reader["creatorNum"]));
+                    // Map database columns to ZPL template indices
+                    fields[0] = NullToEmpty(reader["dummySampleNum"]);
+                    fields[1] = NullToEmpty(reader["model"]);
+                    fields[2] = NullToEmpty(reader["rank"]);
+                    fields[3] = NullToEmpty(reader["workCenterCode"]);
+                    fields[4] = NullToEmpty(id);
+                    fields[5] = NullToEmpty(reader["iteration"]);
+                    fields[6] = NullToEmpty(((DateTime)reader["creationDate"]).ToString("MM/dd/yyyy"));
+                    fields[7] = NullToEmpty(reader["failureMode"]);
+                    fields[8] = NullToEmpty(reader["location"]);
+                    fields[9] = NullToEmpty(reader["creatorNum"]);
                 }
             }
         }
 
-        return fieldMap;
+        return fields;
     }
 }

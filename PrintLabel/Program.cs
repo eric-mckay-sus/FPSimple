@@ -14,31 +14,14 @@ using InterProcessIO;
 public record ZplCommand
 {
     /// <summary>
-    /// Gets or sets a value indicating whether upload mode is engaged.
-    /// </summary>
-    public bool IsUpload { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether print mode is engaged.
-    /// </summary>
-    public bool IsPrint { get; set; }
-
-    /// <summary>
     /// Gets or sets print mode's sample ID.
     /// </summary>
     public int? SampleId { get; set; } = null;
 
     /// <summary>
-    /// Gets or sets the path on this machine of the ZPL file to be uploaded.
-    /// Always check <see cref="IsUpload"/> before accessing to verify validity.
+    /// Gets or sets the path on this machine of the ZPL template to use.
     /// </summary>
-    public string UploadPath { get; set; } = Config.UploadPath;
-
-    /// <summary>
-    /// Gets or sets the path on the printer of the ZPL file to be printed.
-    /// Always check <see cref="IsPrint"/> before accessing to verify validity.
-    /// </summary>
-    public string PrintPath { get; set; } = Config.PrintPath;
+    public string TemplatePath { get; set; } = Config.TemplatePath;
 }
 
 /// <summary>
@@ -94,29 +77,12 @@ public partial class ZebraUploadPrint
     /// <returns>A Task representing that the arguments have been parsed and executed.</returns>
     public async Task PromptAndExecute()
     {
-        ZplCommand zplCmd = new ()
-        {
-            IsUpload = await this.input.GetConfirmAsync(new ("Do you wish to upload a new template?")),
-        };
+        ZplCommand zplCmd = new ();
 
-        if (zplCmd.IsUpload)
-        {
-            await this.PromptUpload(zplCmd);
-        }
-
-        zplCmd.IsPrint = await this.input.GetConfirmAsync(new ($"Do you wish to {(zplCmd.IsUpload ? "print a sample using the new template" : "print a sample using a template already on this printer")}?"));
-
-        if (zplCmd.IsPrint)
-        {
-            await this.PromptPrint(zplCmd);
-        }
+        await this.PromptPrint(zplCmd);
 
         // Use the default TCP connection
-        // Only attempt if the user didn't decline both
-        if (zplCmd.IsUpload || zplCmd.IsPrint)
-        {
-            await this.ExecuteAsync(zplCmd);
-        }
+        await this.ExecuteAsync(zplCmd);
     }
 
     /// <summary>
@@ -144,27 +110,14 @@ public partial class ZebraUploadPrint
             // If the client wasn't already connected to the printer, connect them now
             if (!zplConn.Connected)
             {
-                await zplConn.ConnectAsync(Config.GetPrinterIp(), Config.PrinterPort);
+                await zplConn.ConnectAsync(Config.PrinterIp, Config.PrinterPort);
             }
 
             using NetworkStream stream = zplConn.GetStream();
 
-            List<string> completedList = [];
+            await this.PrintAsync(zplCmd, stream);
 
-            if (zplCmd.IsUpload)
-            {
-                await this.UploadAsync(zplCmd, stream);
-                completedList.Add("Upload");
-            }
-
-            if (zplCmd.IsPrint)
-            {
-                await this.PrintAsync(zplCmd, stream);
-                completedList.Add(zplCmd.IsUpload ? "print" : "Print");
-            }
-
-            string completedOps = string.Join(" and ", completedList);
-            return new Report($"{completedOps} complete", ReportLevel.SUCCESS);
+            return new Report("Print complete", ReportLevel.SUCCESS);
         }
         catch (SocketException e)
         {

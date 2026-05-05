@@ -297,7 +297,7 @@ public partial class CreateSample : TableManager<Sample>
         using TcpClient conn = new ();
         try
         {
-            await conn.ConnectAsync(PrintLabel.Config.GetPrinterIp(), PrintLabel.Config.PrinterPort, this.printCts.Token);
+            await conn.ConnectAsync(PrintLabel.Config.PrinterIp, PrintLabel.Config.PrinterPort, this.printCts.Token);
 
             foreach (Sample sample in this.selectedForPrint)
             {
