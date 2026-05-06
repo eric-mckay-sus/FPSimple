@@ -1,10 +1,54 @@
 ﻿@page "/approve-samples"
 @attribute [Authorize(Roles = "Admin")]
-@inherits TableManager<UnapprovedSample>
+@inherits TableManager<Sample>
 
 <PageTitle>Approve Samples</PageTitle>
 
 <h2>Sample Approval</h2>
+
+@* Approval panel - appears when a row's approve button is clicked *@
+<div class="centered-container">
+    <div class="expandable-container mt-2 w-75">
+        <div class="expandable-wrapper @(pendingSample != null ? "is-expanded" : "")">
+            <div class="expandable-content">
+                <div class="form-card animate-fade-in">
+                    <h5 class="form-title">Approve Sample</h5>
+                    <p class="text-muted">
+                        @pendingSample?.Model / @pendingSample?.Line —
+                        Sample #<strong>@pendingSample?.DummySampleNum</strong>:<br/>@pendingSample?.FailureMode
+                    </p>
+                    <div class="row align-items-end">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Expiration Date</label>
+                            <input type="date"
+                                class="form-control"
+                                @bind="expiryDate"
+                                min="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" />
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(approvalError))
+                    {
+                        <div class="alert alert-danger py-2">@approvalError</div>
+                    }
+                    <div class="form-actions">
+                        <button class="btn btn-outline-secondary me-2"
+                                disabled="@isApproving"
+                                @onclick="CancelApproval">Cancel</button>
+                        <button class="btn btn-primary"
+                                disabled="@(isApproving || expiryDate == default)"
+                                @onclick="ConfirmApproval">
+                            @if (isApproving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            }
+                            <Icon Name="IconName.Check2" /> Confirm Approval
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="mt-4">
     @if (this.IsLoading)
@@ -17,9 +61,13 @@
     else if (DataView.Any())
     {
         @* Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button *@
-        <TablePresenter T="UnapprovedSample"
+        <TablePresenter T="Sample"
                         Base="this"
-                        OnExpand="() => {}" />
+                        Target="pendingSample"
+                        TargetStyle="table-success"
+                        OnExpand="() => {}"
+                        OnApprove="HandleApprove"
+                        OnDeny="HandleDeny" />
     }
     else
     {
@@ -28,3 +76,5 @@
         </div>
     }
 </div>
+
+<DeleteDialog @ref="DeleteDialog" />

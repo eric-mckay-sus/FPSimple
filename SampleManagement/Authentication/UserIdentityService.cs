@@ -81,7 +81,7 @@ public class UserIdentityService(IDbContextFactory<FPSampleDbContext> dbFactory,
         // Extract associate number from remaining (hopefully all numeric) characters
         if (int.TryParse(associateString, out int associateNum))
         {
-            using FPSampleDbContext context = this.dbFactory.CreateDbContext();
+            using FPSampleDbContext context = await this.dbFactory.CreateDbContextAsync();
             Associate? associate = await context.Set<Associate>()
                 .FirstOrDefaultAsync(a => a.AssociateNum == associateNum);
 

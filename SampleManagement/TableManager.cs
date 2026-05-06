@@ -106,6 +106,7 @@ public class TableManager<T> : ComponentBase
             using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
             IQueryable<T> query = context.Set<T>().AsNoTracking();
 
+            query = this.ApplyFilters(query);
             query = this.ApplySorting(query);
             this.TotalCount = await query.CountAsync();
             this.DataView = await query
@@ -206,6 +207,13 @@ public class TableManager<T> : ComponentBase
     /// </summary>
     /// <returns>A Task representing that the page has loaded.</returns>
     protected override async Task OnInitializedAsync() => await this.RefreshData();
+
+    /// <summary>
+    /// Applies custom filters to the query. Override in derived classes to add filtering logic.
+    /// </summary>
+    /// <param name="query">The query to which filters should be appended.</param>
+    /// <returns>An IQueryable object with filters applied.</returns>
+    protected virtual IQueryable<T> ApplyFilters(IQueryable<T> query) => query;
 
     /// <summary>
     /// Uses dynamic LINQ to draft a SQL ORDER BY based on the current sort.

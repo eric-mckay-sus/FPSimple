@@ -399,3 +399,8 @@ h1:focus {
     max-width: none;
     width: auto;
 }
+
+.table-striped > tbody > tr.table-success > td {
+    background-color: #d1e7dd !important;
+    color: #0f5132 !important;
+}

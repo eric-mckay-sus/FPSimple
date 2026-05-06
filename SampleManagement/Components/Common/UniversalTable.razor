@@ -61,8 +61,8 @@
                         @displayName @SortIcon(prop.Name)
                     </th>
                 }
-                    @if (OnPrint.HasDelegate || OnExpand.HasDelegate){
-                    <th>Actions</th> @* For the expand and print buttons *@
+                    @if (this.showActions){
+                    <th>Actions</th> @* For the expand, print, and approve buttons *@
                 }
             </tr>
         </thead>
@@ -76,7 +76,7 @@
                         bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
                         <td class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (_isExpanded ? "verbose-visible" : "verbose-hidden") : "")">@(prop.GetValue(item)?.ToString() ?? "—")</td>
                     }
-                    @if (OnExpand.HasDelegate || OnPrint.HasDelegate) {
+                    @if (this.showActions) {
                         <td>
                             @* Only show the expand button if there's an expand binding and we're not in print select mode *@
                             @if (OnExpand.HasDelegate && !PrintModeEngaged){
@@ -89,6 +89,20 @@
                                     {
                                         <Icon Name="IconName.ArrowsExpandVertical" Size="IconSize.x4" />
                                     }
+                                </button>
+                            }
+                            @if (OnApprove.HasDelegate){
+                                <button class="btn btn-link btn-action p-0 me-2"
+                                        @onclick="() => OnApprove.InvokeAsync(item)"
+                                        title="Approve">
+                                    <Icon Name="IconName.CheckLg" Size="IconSize.x4" Color="IconColor.Success" />
+                                </button>
+                            }
+                            @if (OnDeny.HasDelegate){
+                                <button class="btn btn-link btn-action p-0 me-2"
+                                        @onclick="() => OnDeny.InvokeAsync(item)"
+                                        title="Deny">
+                                    <Icon Name="IconName.XLg" Size="IconSize.x4" Color="IconColor.Danger" />
                                 </button>
                             }
                             @* Only show the print button/checkbox if there's a print binding *@
@@ -125,17 +139,18 @@
     private T? _attentionItem { get; set; } // Allows the user to highlight a row for focus (no information shown)
     [Parameter] public string? TargetStyle { get; set; } // The highlight style for the target row
     private bool _isExpanded { get; set; } = false; // Tracks whether the table is in expanded view
+    private bool showActions => this.OnExpand.HasDelegate || this.OnPrint.HasDelegate || this.OnApprove.HasDelegate;
 
     private string GetRowClass(T item)
     {
         if (item == null) return "";
 
-        // Priority 1: the row being expanded (target)
-        if (item.Equals(Target))
+        // Priority 1: the row being targeted
+        if (Object.Equals(item, Target))
             return TargetStyle ?? "table-primary";
 
         // Priority 2: the row the user clicked to "watch"
-        if (item.Equals(_attentionItem))
+        if (Object.Equals(item, _attentionItem))
             return "table-active cursor-pointer";
 
         return "cursor-pointer";
@@ -197,6 +212,7 @@
 
     // Approval
     [Parameter] public EventCallback<T> OnApprove { get; set; } // The action to bind to approval
+    [Parameter] public EventCallback<T> OnDeny { get; set; } // The action to bind to denial
 
     // Pagination Params
     [Parameter] public int CurrentPage { get; set; }

@@ -29,28 +29,15 @@ public class FPSampleDbContext(DbContextOptions<FPSampleDbContext> options) : Db
     public DbSet<Sample> Samples { get; set; }
 
     /// <summary>
-    /// Gets or sets the unapproved samples table (for display in the sample approval page).
-    /// </summary>
-    public DbSet<UnapprovedSample> UnapprovedSamples { get; set; }
-
-    /// <summary>
     /// Gets or sets the associate information table.
     /// </summary>
     public DbSet<Associate> AssociateInfo { get; set; }
 
     /// <summary>
-    /// Explicitly mapps UnapprovedSample to UnapprovedSample and Sample to Samples.
-    /// EF Core's diff is strict.
+    /// All <see cref="Sample"/> objects live in <see cref="Samples"/>.
     /// </summary>
     /// <param name="modelBuilder"><inheritdoc/></param>
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        // Map the base class to the table
-        modelBuilder.Entity<Sample>().ToTable("Samples");
-
-        // Map the inherited class to the view
-        modelBuilder.Entity<UnapprovedSample>().ToView("UnapprovedSamples");
-    }
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.Entity<Sample>().ToTable("Samples");
 }
 
 /// <summary>
@@ -143,13 +130,6 @@ public class ModelLine
     /// </summary>
     [Column("fullDesc")]
     public required string FullDescription { get; set; }
-}
-
-/// <summary>
-/// Wrapper class for use with the unapproved samples view (EF Core compliance).
-/// </summary>
-public class UnapprovedSample : Sample
-{
 }
 
 /// <summary>
