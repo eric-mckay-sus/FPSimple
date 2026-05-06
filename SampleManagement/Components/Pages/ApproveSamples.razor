@@ -1,6 +1,6 @@
 ﻿@page "/approve-samples"
 @attribute [Authorize(Roles = "Admin")]
-@inherits TableManager<UnapprovedSample>
+@inherits TableManager<Sample>
 
 <PageTitle>Approve Samples</PageTitle>
 
@@ -61,12 +61,13 @@
     else if (DataView.Any())
     {
         @* Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button *@
-        <TablePresenter T="UnapprovedSample"
+        <TablePresenter T="Sample"
                         Base="this"
                         Target="pendingSample"
                         TargetStyle="table-success"
                         OnExpand="() => {}"
-                        OnApprove="HandleApprove" />
+                        OnApprove="HandleApprove"
+                        OnDeny="HandleDeny" />
     }
     else
     {
@@ -75,3 +76,5 @@
         </div>
     }
 </div>
+
+<DeleteDialog @ref="DeleteDialog" />

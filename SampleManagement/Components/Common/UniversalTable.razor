@@ -91,6 +91,20 @@
                                     }
                                 </button>
                             }
+                            @if (OnApprove.HasDelegate){
+                                <button class="btn btn-link btn-action p-0 me-2"
+                                        @onclick="() => OnApprove.InvokeAsync(item)"
+                                        title="Approve">
+                                    <Icon Name="IconName.CheckLg" Size="IconSize.x4" Color="IconColor.Success" />
+                                </button>
+                            }
+                            @if (OnDeny.HasDelegate){
+                                <button class="btn btn-link btn-action p-0 me-2"
+                                        @onclick="() => OnDeny.InvokeAsync(item)"
+                                        title="Deny">
+                                    <Icon Name="IconName.XLg" Size="IconSize.x4" Color="IconColor.Danger" />
+                                </button>
+                            }
                             @* Only show the print button/checkbox if there's a print binding *@
                             @if (OnPrint.HasDelegate){
                                 @if (PrintModeEngaged)
@@ -108,13 +122,6 @@
                                         <Icon Name="IconName.Printer" Size="IconSize.x4" />
                                     </button>
                                 }
-                            }
-                            @if (OnApprove.HasDelegate){
-                                <button class="btn btn-link btn-action p-0 me-2"
-                                        @onclick="() => OnApprove.InvokeAsync(item)"
-                                        title="Approve">
-                                    <Icon Name="IconName.CheckLg" Size="IconSize.x4" Color="IconColor.Success" />
-                                </button>
                             }
                         </td>
                     }
@@ -205,6 +212,7 @@
 
     // Approval
     [Parameter] public EventCallback<T> OnApprove { get; set; } // The action to bind to approval
+    [Parameter] public EventCallback<T> OnDeny { get; set; } // The action to bind to denial
 
     // Pagination Params
     [Parameter] public int CurrentPage { get; set; }
