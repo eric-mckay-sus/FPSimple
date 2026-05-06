@@ -110,8 +110,10 @@
                                 }
                             }
                             @if (OnApprove.HasDelegate){
-                                <button class="btn btn-link btn-action p-0 text-secondary me-2" @onclick="async () => await OnApprove.InvokeAsync(item)" title="Approve">
-                                    <Icon Name="IconName.Check" Size="IconSize.x4" />
+                                <button class="btn btn-link btn-action p-0 me-2"
+                                        @onclick="() => OnApprove.InvokeAsync(item)"
+                                        title="Approve">
+                                    <Icon Name="IconName.CheckLg" Size="IconSize.x4" Color="IconColor.Success" />
                                 </button>
                             }
                         </td>
@@ -136,12 +138,12 @@
     {
         if (item == null) return "";
 
-        // Priority 1: the row being expanded (target)
-        if (item.Equals(Target))
+        // Priority 1: the row being targeted
+        if (Object.Equals(item, Target))
             return TargetStyle ?? "table-primary";
 
         // Priority 2: the row the user clicked to "watch"
-        if (item.Equals(_attentionItem))
+        if (Object.Equals(item, _attentionItem))
             return "table-active cursor-pointer";
 
         return "cursor-pointer";

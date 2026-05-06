@@ -15,7 +15,9 @@
     SelectedForPrint="SelectedForPrint"
     SelectedForPrintChanged="SelectedForPrintChanged"
     OnExpand="OnExpand"
-    OnApprove="OnApprove" />
+    OnApprove="OnApprove"
+    Target="Target"
+    TargetStyle="@TargetStyle"/>
 
 @code{
     [Parameter, EditorRequired]
@@ -23,8 +25,10 @@
 
     [Parameter] public EventCallback<T> OnPrint { get; set; }
     [Parameter] public bool PrintModeEngaged { get; set; }
-    [Parameter] public List<T> SelectedForPrint { get; set; } = [];
+    [Parameter] public List<T?> SelectedForPrint { get; set; } = [];
     [Parameter] public EventCallback<List<T>> SelectedForPrintChanged { get; set; }
     [Parameter] public EventCallback<T> OnExpand { get; set; }
     [Parameter] public EventCallback<T> OnApprove { get; set; }
+    [Parameter] public T? Target { get; set; }
+    [Parameter] public string? TargetStyle { get; set; }
 }
