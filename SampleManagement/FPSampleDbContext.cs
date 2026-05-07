@@ -34,12 +34,17 @@ public class FPSampleDbContext(DbContextOptions<FPSampleDbContext> options) : Db
     public DbSet<Associate> AssociateInfo { get; set; }
 
     /// <summary>
-    /// Gets or sets the associate information table.
+    /// Gets or sets the writable remake request table.
     /// </summary>
     public DbSet<RemakeRequest> RemakeRequests { get; set; }
 
     /// <summary>
-    /// Gets or sets the associate information table.
+    /// Gets or sets the read-only remake request table (join to reason text).
+    /// </summary>
+    public DbSet<RemakeRequestText> ViewRemakeRequests { get; set; }
+
+    /// <summary>
+    /// Gets or sets the 'junk' table mapping bytes to reason strings.
     /// </summary>
     public DbSet<RemakeReason> RemakeReasons { get; set; }
 
@@ -352,56 +357,94 @@ public class Associate
 }
 
 /// <summary>
-    /// Represents a remake request record in the database.
+/// Represents a remake request record in the database.
+/// </summary>
+[PrimaryKey(nameof(SampleId))]
+public class RemakeRequest
+{
+    /// <summary>
+    /// Gets or sets the ID of the sample to be remade.
     /// </summary>
-    [PrimaryKey(nameof(SampleId))]
-    public class RemakeRequest
-    {
-        /// <summary>
-        /// Gets or sets the ID of the sample to be remade.
-        /// </summary>
-        [Column("sampleID")]
-        public int SampleId { get; set; }
-
-        /// <summary>
-        /// Gets or sets the dummy sample number of the sample to be remade.
-        /// </summary>
-        [Column("dummySampleNum")]
-        public short DummySampleNum { get; set; }
-
-        /// <summary>
-        /// Gets or sets the associate number of the associate requesting the remake.
-        /// </summary>
-        [Column("associateNum")]
-        public int AssociateNum { get; set; }
-
-        /// <summary>
-        /// Gets or sets the ID of the remake request reason in <see cref="FPSampleDbContext.RemakeReasons"/>.
-        /// </summary>
-        [Column("reason")]
-        public byte Reason { get; set; }
-
-        /// <summary>
-        /// Gets or sets the time the sample remake was requested.
-        /// </summary>
-        [Column("requestTime")]
-        public DateTime RequestTime { get; set; }
-    }
+    [Column("sampleID")]
+    public int SampleId { get; set; }
 
     /// <summary>
-    /// Represents a mapped remake reason in the database.
+    /// Gets or sets the dummy sample number of the sample to be remade.
     /// </summary>
-    public class RemakeReason
-    {
-        /// <summary>
-        /// Gets or sets the ID of the remake reason.
-        /// </summary>
-        [Column("Id")]
-        public byte ReasonId { get; set; }
+    [Column("dummySampleNum")]
+    public short DummySampleNum { get; set; }
 
-        /// <summary>
-        /// Gets or sets the actual remake reason (text).
-        /// </summary>
-        [Column("reason")]
-        public string? ReasonText { get; set; }
-    }
+    /// <summary>
+    /// Gets or sets the associate number of the associate requesting the remake.
+    /// </summary>
+    [Column("requesterNum")]
+    public int RequesterNum { get; set; }
+
+    /// <summary>
+    /// Gets or sets the ID of the remake request reason in <see cref="FPSampleDbContext.RemakeReasons"/>.
+    /// </summary>
+    [Column("reasonID")]
+    public byte ReasonId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the time the sample remake was requested.
+    /// </summary>
+    [Column("requestTime")]
+    public DateTime RequestTime { get; set; }
+}
+
+/// <summary>
+/// Represents a remake request record in the database.
+/// </summary>
+[Keyless]
+public class RemakeRequestText
+{
+    /// <summary>
+    /// Gets or sets the ID of the sample to be remade.
+    /// </summary>
+    [Column("sampleID")]
+    public int SampleId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the dummy sample number of the sample to be remade.
+    /// </summary>
+    [Column("dummySampleNum")]
+    public short DummySampleNum { get; set; }
+
+    /// <summary>
+    /// Gets or sets the associate number of the associate requesting the remake.
+    /// </summary>
+    [Column("requesterNum")]
+    public int RequesterNum { get; set; }
+
+    /// <summary>
+    /// Gets or sets the remake request reason text.
+    /// </summary>
+    [Column("reasonText")]
+    public byte ReasonText { get; set; }
+
+    /// <summary>
+    /// Gets or sets the time the sample remake was requested.
+    /// </summary>
+    [Column("requestTime")]
+    public DateTime RequestTime { get; set; }
+}
+
+/// <summary>
+/// Represents a mapped remake reason in the database.
+/// </summary>
+[PrimaryKey(nameof(ReasonId))]
+public class RemakeReason
+{
+    /// <summary>
+    /// Gets or sets the ID of the remake reason.
+    /// </summary>
+    [Column("Id")]
+    public byte ReasonId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the actual remake reason (text).
+    /// </summary>
+    [Column("reason")]
+    public string? ReasonText { get; set; }
+}

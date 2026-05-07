@@ -134,7 +134,7 @@ public partial class CreateSample : TableManager<Sample>
     /// </summary>
     /// <param name="query"><inheritdoc/></param>
     /// <returns>The <paramref name="query"/> where remake date is null.</returns>
-    protected override IQueryable<Sample> ApplyFilters(IQueryable<Sample> query) => query.Where(s => s.RemakeDate != null);
+    protected override IQueryable<Sample> ApplyFilters(IQueryable<Sample> query) => query.Where(s => s.RemakeDate == null);
 
     private static void DoNothing()
     {
