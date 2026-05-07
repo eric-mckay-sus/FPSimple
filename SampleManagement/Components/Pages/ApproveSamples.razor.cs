@@ -95,12 +95,12 @@ public partial class ApproveSamples : TableManager<Sample>
             using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
             await context.Database.ExecuteSqlInterpolatedAsync($@"
                 EXEC [dbo].[ApproveSample]
-                    @sampleID    = {this.pendingSample.SampleID},
+                    @sampleID    = {this.pendingSample.SampleId},
                     @approverNum = {this.approverNum},
                     @expiryDate  = {this.expiryDate}");
 
             await this.RefreshData();
-            this.ToastService.Notify(new (ToastType.Success, $"Sample #{this.pendingSample.SampleID} approved!"));
+            this.ToastService.Notify(new (ToastType.Success, $"Sample #{this.pendingSample.SampleId} approved!"));
             this.pendingSample = null;
         }
         catch (Exception ex)
@@ -123,10 +123,16 @@ public partial class ApproveSamples : TableManager<Sample>
     {
         if (await this.DeleteDialog.ConfirmAsync(sample))
         {
+            // If the sample being denied was pending approval, close the approval window
+            if (sample.Equals(this.pendingSample))
+            {
+                this.CancelApproval();
+            }
+
             using FPSampleDbContext context = this.DbFactory.CreateDbContext();
-            await context.Samples.Where(x => x.SampleID == sample.SampleID).ExecuteDeleteAsync();
+            await context.Samples.Where(x => x.SampleId == sample.SampleId).ExecuteDeleteAsync();
             await this.RefreshData();
-            this.ToastService.Notify(new (ToastType.Success, $"Successfully deleted sample #{sample.SampleID}"));
+            this.ToastService.Notify(new (ToastType.Success, $"Successfully deleted sample #{sample.SampleId}"));
         }
     }
 }

@@ -150,14 +150,14 @@ public class ModelLine
 /// <summary>
 /// Represents a sample record in the database.
 /// </summary>
-[PrimaryKey(nameof(SampleID))]
+[PrimaryKey(nameof(SampleId))]
 public class Sample
 {
     /// <summary>
     /// Gets or sets the unique sample identifier.
     /// </summary>
     [Column("sampleID")]
-    public int SampleID { get; set; }
+    public int SampleId { get; set; }
 
     /// <summary>
     /// Gets or sets the dummy sample number for this sample.
@@ -265,7 +265,7 @@ public class Sample
     {
         if (obj is Sample other)
         {
-            return this.SampleID == other.SampleID;
+            return this.SampleId == other.SampleId;
         }
 
         return false;
@@ -275,7 +275,7 @@ public class Sample
     /// Gets the hash code for this sample.
     /// </summary>
     /// <returns>The sample's hash code.</returns>
-    public override int GetHashCode() => this.SampleID.GetHashCode();
+    public override int GetHashCode() => this.SampleId.GetHashCode();
 
     /// <summary>
     /// Returns a descriptive string representation of this sample.
@@ -283,7 +283,7 @@ public class Sample
     /// <returns>The sample description.</returns>
     public override string ToString()
     {
-        return $"ID: {this.SampleID}, Sample #: {this.DummySampleNum}, Model: {this.Model}, Line: {this.Line}";
+        return $"ID: {this.SampleId}, Sample #: {this.DummySampleNum}, Model: {this.Model}, Line: {this.Line}";
     }
 }
 
@@ -421,7 +421,7 @@ public class RemakeRequestText
     /// Gets or sets the remake request reason text.
     /// </summary>
     [Column("reasonText")]
-    public byte ReasonText { get; set; }
+    public string? ReasonText { get; set; }
 
     /// <summary>
     /// Gets or sets the time the sample remake was requested.

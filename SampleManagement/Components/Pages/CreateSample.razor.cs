@@ -268,12 +268,12 @@ public partial class CreateSample : TableManager<Sample>
         this.isPrinting = true;
         try
         {
-            ZplCommand cmd = new () { SampleId = sample.SampleID };
+            ZplCommand cmd = new () { SampleId = sample.SampleId };
             ZebraUploadPrint zupObject = new (this.InputProvider, this.Reporter);
             Report statusReport = await zupObject.ExecuteAsync(cmd);
             if (statusReport.level == ReportLevel.SUCCESS)
             {
-                this.ToastService.Notify(new (ToastType.Success, $"Sample {sample.SampleID} sent to printer."));
+                this.ToastService.Notify(new (ToastType.Success, $"Sample {sample.SampleId} sent to printer."));
             }
             else
             {
@@ -312,25 +312,25 @@ public partial class CreateSample : TableManager<Sample>
                 this.printCts.Token.ThrowIfCancellationRequested();
 
                 // Create a print request for each sample
-                ZplCommand cmd = new () { SampleId = sample.SampleID };
+                ZplCommand cmd = new () { SampleId = sample.SampleId };
                 ZebraUploadPrint zupObject = new (this.InputProvider, this.Reporter);
                 Report statusReport = await zupObject.ExecuteAsync(cmd, conn, leaveOpen: true);
                 if (statusReport.level == ReportLevel.SUCCESS)
                 {
-                    this.ToastService.Notify(new (ToastType.Success, $"Sample #{sample.SampleID} sent to printer."));
+                    this.ToastService.Notify(new (ToastType.Success, $"Sample #{sample.SampleId} sent to printer."));
                     this.printed++;
                 }
                 else
                 {
-                    this.ToastService.Notify(new (ToastType.Danger, $"Sample {sample.SampleID}: {statusReport.message}"));
-                    failedIds.Add(sample.SampleID);
+                    this.ToastService.Notify(new (ToastType.Danger, $"Sample {sample.SampleId}: {statusReport.message}"));
+                    failedIds.Add(sample.SampleId);
                 }
 
                 await Task.Delay(PrintLabel.Config.InterPrintDelayMs, this.printCts.Token); // Wait a second between prints to ensure each toast is visible and that printer isn't overloaded
             }
 
             // By setting selectedForPrint to only the failed IDs, the user can see easily which samples to investigate
-            this.selectedForPrint = this.selectedForPrint.Where(x => failedIds.Contains(x.SampleID)).ToList();
+            this.selectedForPrint = this.selectedForPrint.Where(x => failedIds.Contains(x.SampleId)).ToList();
 
             // If no prints failed, inform the user and exit print mode
             if (this.selectedForPrint.Count == 0)

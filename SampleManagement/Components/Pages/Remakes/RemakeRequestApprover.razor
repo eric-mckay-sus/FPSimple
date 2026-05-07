@@ -1,8 +1,45 @@
 @inherits TableManager<RemakeRequestText>
+@attribute [Authorize(Roles = "Admin")]
 
-<PageTitle>Request Sample Remake</PageTitle>
+<PageTitle>Sample Remakes</PageTitle>
 
-<h2>Request Sample Remake</h2>
+<h2>Approve Remake Requests</h2>
+
+@* Approval panel - appears when a row's approve button is clicked *@
+<div class="centered-container">
+    <div class="expandable-container mt-2 w-50">
+        <div class="expandable-wrapper @(pendingRequest != null ? "is-expanded" : "")">
+            <div class="expandable-content">
+                <div class="form-card animate-fade-in">
+                    <h5 class="form-title">Approve Remake</h5>
+                    <p class="text-body-secondary">
+                        Sample #<strong>@pendingRequest?.SampleId</strong>:<br/>
+                        Reason: @pendingRequest?.ReasonText
+                    </p>
+                    @if (!string.IsNullOrEmpty(approvalError))
+                    {
+                        <div class="alert alert-danger py-2">@approvalError</div>
+                    }
+                    @* Trigger disabled state when loading to prevent impatient interference *@
+                    <div class="form-actions">
+                        <button class="btn btn-outline-secondary me-2"
+                                disabled="@isApproving"
+                                @onclick="CancelApproval">Cancel</button>
+                        <button class="btn btn-primary"
+                                disabled="@isApproving"
+                                @onclick="ConfirmApproval">
+                            @if (isApproving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            }
+                            <Icon Name="IconName.Check2" /> Confirm Approval
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="mt-4">
     @if (this.IsLoading)
@@ -17,7 +54,10 @@
         @* Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button *@
         <TablePresenter T="RemakeRequestText"
                         Base="this"
-                        OnExpand="() => {}" />
+                        Target="pendingRequest"
+                        TargetStyle="table-success"
+                        OnApprove="HandleApprove"
+                        OnDeny="HandleDeny" />
     }
     else
     {
@@ -26,3 +66,5 @@
         </div>
     }
 </div>
+
+<DeleteDialog @ref="DeleteDialog" />

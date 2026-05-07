@@ -98,19 +98,19 @@
                                     <Icon Name="IconName.CheckLg" Size="IconSize.x4" Color="IconColor.Success" />
                                 </button>
                             }
-                            @if (OnDeny.HasDelegate){
-                                <button class="btn btn-link btn-action p-0 me-2"
-                                        @onclick="() => OnDeny.InvokeAsync(item)"
-                                        title="Deny">
-                                    <Icon Name="IconName.XLg" Size="IconSize.x4" Color="IconColor.Danger" />
-                                </button>
-                            }
                             @if (OnRemake.HasDelegate)
                             {
                                 <button class="btn btn-link btn-action p-0 me-2"
                                         @onclick="() => OnRemake.InvokeAsync(item)"
                                         title="Request Remake">
                                     <Icon Name="IconName.ArrowClockwise" Size="IconSize.x4" />
+                                </button>
+                            }
+                            @if (OnDeny.HasDelegate){
+                                <button class="btn btn-link btn-action p-0 me-2"
+                                        @onclick="() => OnDeny.InvokeAsync(item)"
+                                        title="Deny">
+                                    <Icon Name="IconName.XLg" Size="IconSize.x4" Color="IconColor.Danger" />
                                 </button>
                             }
                             @* Only show the print button/checkbox if there's a print binding *@
