@@ -34,6 +34,16 @@ public class FPSampleDbContext(DbContextOptions<FPSampleDbContext> options) : Db
     public DbSet<Associate> AssociateInfo { get; set; }
 
     /// <summary>
+    /// Gets or sets the associate information table.
+    /// </summary>
+    public DbSet<RemakeRequest> RemakeRequests { get; set; }
+
+    /// <summary>
+    /// Gets or sets the associate information table.
+    /// </summary>
+    public DbSet<RemakeReason> RemakeReasons { get; set; }
+
+    /// <summary>
     /// All <see cref="Sample"/> objects live in <see cref="Samples"/>.
     /// </summary>
     /// <param name="modelBuilder"><inheritdoc/></param>
@@ -235,6 +245,13 @@ public class Sample
     public bool IsActive { get; set; }
 
     /// <summary>
+    /// Gets or sets the date this sample was remade (if applicable).
+    /// </summary>
+    [Column("remakeDate")]
+    [Verbose]
+    public DateOnly? RemakeDate { get; set; }
+
+    /// <summary>
     /// Samples are equal if they share the same sample ID.
     /// </summary>
     /// <param name="obj">The object to compare.</param>
@@ -333,3 +350,58 @@ public class Associate
         return $"Name: {this.Name}, Assoc #: {this.AssociateNum}, Badge #: {this.BadgeNum}";
     }
 }
+
+/// <summary>
+    /// Represents a remake request record in the database.
+    /// </summary>
+    [PrimaryKey(nameof(SampleId))]
+    public class RemakeRequest
+    {
+        /// <summary>
+        /// Gets or sets the ID of the sample to be remade.
+        /// </summary>
+        [Column("sampleID")]
+        public int SampleId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the dummy sample number of the sample to be remade.
+        /// </summary>
+        [Column("dummySampleNum")]
+        public short DummySampleNum { get; set; }
+
+        /// <summary>
+        /// Gets or sets the associate number of the associate requesting the remake.
+        /// </summary>
+        [Column("associateNum")]
+        public int AssociateNum { get; set; }
+
+        /// <summary>
+        /// Gets or sets the ID of the remake request reason in <see cref="FPSampleDbContext.RemakeReasons"/>.
+        /// </summary>
+        [Column("reason")]
+        public byte Reason { get; set; }
+
+        /// <summary>
+        /// Gets or sets the time the sample remake was requested.
+        /// </summary>
+        [Column("requestTime")]
+        public DateTime RequestTime { get; set; }
+    }
+
+    /// <summary>
+    /// Represents a mapped remake reason in the database.
+    /// </summary>
+    public class RemakeReason
+    {
+        /// <summary>
+        /// Gets or sets the ID of the remake reason.
+        /// </summary>
+        [Column("Id")]
+        public byte ReasonId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the actual remake reason (text).
+        /// </summary>
+        [Column("reason")]
+        public string? ReasonText { get; set; }
+    }

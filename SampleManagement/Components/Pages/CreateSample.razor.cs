@@ -129,6 +129,13 @@ public partial class CreateSample : TableManager<Sample>
         await base.OnInitializedAsync();
     }
 
+    /// <summary>
+    /// Filters out samples with a remake date (ones that are permanently inactive and have been replaced).
+    /// </summary>
+    /// <param name="query"><inheritdoc/></param>
+    /// <returns>The <paramref name="query"/> where remake date is null.</returns>
+    protected override IQueryable<Sample> ApplyFilters(IQueryable<Sample> query) => query.Where(s => s.RemakeDate != null);
+
     private static void DoNothing()
     {
     }
