@@ -9,7 +9,7 @@ using System.Globalization;
 using System.Data;
 using System.Text.RegularExpressions;
 
-using FileUploadCommon;
+using InterProcessIO;
 
 /// <summary>
 /// Contains utility methods for pre-FP upload parsing.
@@ -89,7 +89,7 @@ public static partial class FPUploadUtilities
         }
 
         string clean = RevisionNumberCleaner().Replace(rev, string.Empty);
-        return byte.TryParse(clean, out byte result) ? result : (byte)0;
+        return byte.TryParse(clean, out byte result) ? result : byte.MaxValue;
     }
 
     /// <summary>

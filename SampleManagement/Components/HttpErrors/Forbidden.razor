@@ -1,0 +1,25 @@
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>403 Forbidden</PageTitle>
+
+<div class="error-page-wrapper">
+    <div class="container-sheet animate-fade-in">
+        <h1 class="error-code forbidden-text">403</h1>
+    <h2 class="error-title">Forbidden</h2>
+    <p class="error-message">Admin privileges are required for this page.</p>
+    <div class="user-info">
+        Logged in as: <strong>@username</strong>
+    </div>
+    <a href="/" class="btn btn-primary">Return to Home</a>
+    </div>
+</div>
+
+@code {
+    private string username = "User";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        username = authState.User.Identity?.Name ?? "User";
+    }
+}

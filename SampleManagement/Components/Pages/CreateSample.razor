@@ -1,0 +1,144 @@
+﻿@page "/"
+@inherits TableManager<Sample>
+
+<PageTitle>Create New Sample</PageTitle>
+
+<h2>Create & Print Samples</h2>
+
+<div class="expandable-container">
+    <div class="expandable-wrapper @(isFormExpanded ? "is-expanded" : "")">
+        <div class="expandable-content">
+            <div class="form-card">
+                <EditForm Model="@formData" OnValidSubmit="HandleSubmit">
+                    <DataAnnotationsValidator />
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Model</label>
+                            <input list="models" @bind-value="formData.Model" @bind-value:after="RefreshFilters"
+                                class="form-control" placeholder="Pick a model first to only see lines that run it..." />
+                            <datalist id="models">
+                                @foreach (string m in availableModels)
+                                {
+                                    <option value="@m">@m</option>
+                                }
+                            </datalist>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Line Name</label>
+                            <input list="lines" @bind-value="formData.WorkCenterCode" @bind-value:after="RefreshFilters"
+                                class="form-control" placeholder="...or pick a line first to only see the models that it runs" />
+                            <datalist id="lines">
+                                @foreach (string l in availableLines)
+                                {
+                                    <option value="@l">@l</option>
+                                }
+                            </datalist>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label class="form-label">Dummy Sample #</label>
+                            <select @bind="formData.DummySampleNum" class="form-select form-control" disabled=@NotReadyForSampleNum>
+                                <option value="0">@(NotReadyForSampleNum ? "Please enter model and line first" : "-- Select --")</option>
+                                @foreach (short num in availableSampleNums)
+                                {
+                                    <option value="@num">@num</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-8">
+                            <label class="form-label">Associate Signature</label>
+                            <input @bind="formData.CreatorNum" class="form-control"
+                                    placeholder=@(NotReadyForSignature ? "Please enter model, line, and dummy sample # first" : "Enter your associate number")
+                                    disabled=@NotReadyForSignature />
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger py-2 mt-2">@errorMessage</div>
+                    }
+
+                    <div class="form-actions d-flex justify-content-center align-items-center">
+                        <button type="button" class="btn btn-outline-secondary btn-lg me-2" @onclick="CloseForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-lg px-4">
+                            <i class="bi bi-plus-lg"></i> Save Sample
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+
+    <div class="expandable-wrapper @(!(isFormExpanded || printModeEngaged) ? "is-expanded" : "")">
+        <div class="expandable-content centered-container">
+            <button class="btn btn-success" @onclick="() => isFormExpanded=true">
+                <Icon Name="IconName.PencilSquare" /> Create New Sample
+            </button>
+        </div>
+    </div>
+    <div class="expandable-wrapper @(printModeEngaged && !isPrinting ? "is-expanded" : "")">
+        <div class="expandable-content centered-container">
+            <h4>Select one or more samples, then press "Confirm Print" to confirm or "Cancel Print" to cancel.</h4>
+        </div>
+    </div>
+    <div class="expandable-wrapper @(isPrinting ? "is-expanded" : "") d-flex justify-content-end mb-2">
+        <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+    </div>
+
+    <div class="d-flex justify-content-end">
+        @if (printModeEngaged)
+        {
+            // If somehow the printCts is null during an print, there is no way to cancel it
+            <button class="btn btn-danger me-2"
+                    disabled="@(printCts == null && isPrinting)"
+                    @onclick="isPrinting ? (printCts != null ? printCts.Cancel : DoNothing) : TogglePrintMode">
+                <Icon Name="IconName.XCircle" /> Cancel Print
+            </button>
+            <button class="btn btn-primary"
+                    disabled="@((selectedForPrint?.Count ?? 0) == 0 || isPrinting)"
+                    title="Send print request after selecting at least one sample"
+                    @onclick="HandlePrint">
+                <Icon Name="IconName.Printer" /> Confirm Print
+            </button>
+        }
+        else
+        {
+            <button class="btn btn-primary"
+                    @onclick="TogglePrintMode">
+                <Icon Name="IconName.Printer" /> Enter Print Mode
+            </button>
+        }
+    </div>
+</div>
+
+<div class="mt-4">
+    @if (this.IsLoading)
+    {
+        <div class="centered-container">
+            <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+        </div>
+
+    }
+    else if (DataView.Any())
+    {
+        @* Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button *@
+        <TablePresenter T="Sample"
+                        Base="this"
+                        OnExpand="() => {}"
+                        OnPrint="args => HandlePrint(args)"
+                        PrintModeEngaged="printModeEngaged"
+                        @bind-SelectedForPrint="selectedForPrint" />
+        @* OnPrint lambda necessary to disambiguate between methods *@
+    }
+    else
+    {
+        <div class="text-center p-5 border rounded bg-light">
+            <p class="text-muted mb-0">No samples registered yet.</p>
+        </div>
+    }
+</div>

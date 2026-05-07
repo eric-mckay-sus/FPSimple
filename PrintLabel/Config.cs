@@ -9,22 +9,37 @@ using StringBuilder = Microsoft.Data.SqlClient.SqlConnectionStringBuilder;
 /// <summary>
 /// A container for the data that is constant in PrintLabel (but could change).
 /// </summary>
-internal static class Config
+public static class Config
 {
     /// <summary>
-    /// Gets or sets the program-side path to the template file to upload.
+    /// Gets the printer's DPI. MUST be 203 or 304 for a valid print.
     /// </summary>
-    public static string UploadPath { get; set; } = @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample203.zpl";
+    public static int PrinterDpi { get; } = 304;
 
     /// <summary>
-    /// Gets or sets the printer-side path to the template file to load and print.
+    /// Gets the path to the template file.
     /// </summary>
-    public static string PrintPath { get; set; } = @"R:\FPSAMPLE203.ZPL";
+    public static string TemplatePath { get; } = PrinterDpi == 304 ? @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample304.zpl" : @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample203.zpl";
 
     /// <summary>
     /// Gets the safe size limit for a ZPL file (RAM precaution).
     /// </summary>
     public static int KbLimit { get; } = 20;
+
+    /// <summary>
+    /// Gets the printer's IP address from the environment variable.
+    /// </summary>
+    public static string PrinterIp { get; } = GetRequired("ZEBRA_PRINTER_IP");
+
+    /// <summary>
+    /// Gets the port through which the printer should be accessed.
+    /// </summary>
+    public static int PrinterPort { get; } = 9100;
+
+    /// <summary>
+    /// Gets the number of milliseconds to wait between prints in a batch.
+    /// </summary>
+    public static int InterPrintDelayMs { get; } = 500;
 
     /// <summary>
     /// Gets the connection string for the database whose credentials are stored in environment variables.
@@ -42,15 +57,6 @@ internal static class Config
             TrustServerCertificate = true,
         };
         return builder.ConnectionString;
-    }
-
-    /// <summary>
-    /// Wrapper for <see cref="GetRequired"/> to get the printer IP address.
-    /// </summary>
-    /// <returns>A string of the target printer's IP address.</returns>
-    public static string GetPrinterIp()
-    {
-        return GetRequired("ZEBRA_PRINTER_IP");
     }
 
     /// <summary>

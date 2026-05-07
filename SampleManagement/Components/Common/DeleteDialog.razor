@@ -1,0 +1,31 @@
+<ConfirmDialog @ref="dialog" />
+
+@code {
+    private ConfirmDialog dialog = default!;
+
+    internal async Task<bool> ConfirmAsync<T>(T item)
+    {
+        var options = new ConfirmDialogOptions
+        {
+            YesButtonText = "Remove",
+            YesButtonColor = ButtonColor.Danger,
+            NoButtonText = "Cancel",
+            NoButtonColor = ButtonColor.Secondary
+        };
+
+        return await dialog.ShowAsync(
+            title: "Confirm Deletion",
+            message1: $"Are you sure you want to {GetDeleteMessage()}?",
+            message2: "THIS ACTION CANNOT BE UNDONE!",
+            confirmDialogOptions: options
+        );
+
+        // Local helper to get this item's deletion message
+        string GetDeleteMessage() => item switch
+        {
+            Sample sample => $"deny sample #{sample.DummySampleNum} for {sample.Model} on {sample.Line}",
+            RemakeRequestText request => $"deny remaking sample {request.SampleId} with reason {request.ReasonText}",
+            _ => $"remove this {item?.GetType()}"
+        };
+    }
+}

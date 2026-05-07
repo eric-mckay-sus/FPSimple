@@ -1,0 +1,50 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <div class="sidebar-header">
+        <div class="header-content">
+            <a class="stanley-icon" href=""></a>
+            <a class="header-brand" href="">Foolproof Samples</a>
+        </div>
+    </div>
+
+    <nav class="flex-column">
+        <div class="nav-item">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <Icon Name="IconName.Pencil" />
+                <label>Create Samples</label>
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="model-mappings" Match="NavLinkMatch.All">
+                <Icon Name="IconName.CloudArrowUpFill" />
+                <label>Upload Model <br/>Mappings</label>
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="foolproof-sheet" Match="NavLinkMatch.All">
+                <Icon Name="IconName.CloudArrowUp" />
+                <label>Upload Foolproof <br/>Sheets</label>
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="request-remake" Match="NavLinkMatch.All">
+                <Icon Name="IconName.ArrowClockwise" />
+                <label>Request Sample<br />Remake</label>
+            </NavLink>
+        </div>
+
+        <AuthorizeView Roles="Admin">
+            <Authorized>
+                <div class="nav-item">
+                    <NavLink class="nav-link" href="approve-samples" Match="NavLinkMatch.All">
+                        <Icon Name="IconName.Check2" />
+                        <label>Approve Samples</label>
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+    </nav>
+</div>

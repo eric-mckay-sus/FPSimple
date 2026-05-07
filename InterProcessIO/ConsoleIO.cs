@@ -1,91 +1,11 @@
-// <copyright file="FluidIO.cs" company="Stanley Electric US Co. Inc.">
+// <copyright file="ConsoleIO.cs" company="Stanley Electric US Co. Inc.">
 // Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
 // </copyright>
-namespace FileUploadCommon;
+
+namespace InterProcessIO;
 
 using System.Data;
 using StringBuilder = System.Text.StringBuilder;
-
-/// <summary>
-/// Represents a report's metadata.
-/// </summary>
-public enum ReportLevel
-{
-    /// <summary>
-    /// The default report
-    /// </summary>
-    INFO,
-
-    /// <summary>
-    /// A report with higher importance than INFO, but no special meaning
-    /// </summary>
-    IMPORTANT,
-
-    /// <summary>
-    /// A report denoting something has failed, but will try again/fall back on a default
-    /// </summary>
-    WARNING,
-
-    /// <summary>
-    /// A report denoting something has failed (without retry)
-    /// </summary>
-    ERROR,
-
-    /// <summary>
-    /// A report representing successful completion
-    /// </summary>
-    SUCCESS,
-}
-
-/// <summary>
-/// The data packet used by I/O classes to associate a report level with the report message.
-/// Different input/output providers can format differently based on the report level.
-/// </summary>
-/// <param name="message">The base message</param>
-/// <param name="level">The message's metadata as a report level</param>
-public record Report(string message, ReportLevel level = ReportLevel.INFO);
-
-/// <summary>
-/// Defines thread-safe asynchronous input redirection.
-/// </summary>
-public interface IInputProvider
-{
-    /// <summary>
-    /// Prompts and awaits user input.
-    /// </summary>
-    /// <param name="prompt">The prompt requiring user input.</param>
-    /// <returns>A Task containing the user's input.</returns>
-    Task<string> GetInputAsync(Report prompt);
-
-    /// <summary>
-    /// Prompts and awaits user input for a yes/no question.
-    /// Like <see cref="GetInputAsync"/>, but returns a boolean instead of a string.
-    /// Recommend calling <see cref="GetInputAsync"/> internally.
-    /// </summary>
-    /// <param name="prompt">The prompt requiring confirmation.</param>
-    /// <returns>A Task containing a boolean representing whether the prompt was confirmed.</returns>
-    Task<bool> GetConfirmAsync(Report prompt);
-}
-
-/// <summary>
-/// Defines thread-safe asynchronous output redirection for Report records (custom IProgress).
-/// </summary>
-public interface IReportOutputProvider
-{
-    /// <summary>
-    /// Asynchronously displays a report to the output.
-    /// </summary>
-    /// <param name="report">The report record to be displayed.</param>
-    /// <returns>A task signaling that the output has finished reporting.</returns>
-    Task ReportAsync(Report report);
-
-    /// <summary>
-    /// Asynchronously displays <paramref name="dt"/> to the output.
-    /// </summary>
-    /// <param name="dt">The DataTable to display.</param>
-    /// <returns>A Task representing the completion of the method.</returns>
-    Task ShowPreview(DataTable dt);
-}
 
 /// <summary>
 /// An implementation of IInputProvider to get input from the console (works kind of like Python's native input() method).
@@ -96,11 +16,19 @@ public class ConsoleInputProvider : IInputProvider
     /// <inheritdoc/> Uses standard console methods suitable for a CLI.
     /// </summary>
     /// <param name="prompt"><inheritdoc/></param>
+    /// <param name="previousError">Unused in this implementation.</param>
     /// <returns>A Task containing the command line input.</returns>
-    public async Task<string> GetInputAsync(Report prompt)
+    public async Task<string> GetInputAsync(Report prompt, string? previousError = null)
     {
+        // If there was an error, show that first
+        if (previousError != null)
+        {
+            Console.WriteLine(new Report(previousError, ReportLevel.ERROR).ToAnsiString());
+        }
+
+        // Always show the prompt (with proper formatting)
         Console.WriteLine(prompt.ToAnsiString());
-        Console.Write('\t');
+        Console.Write('\t'); // Tab to visually "attach" response area to prompt
         return await Task.Run(() => Console.ReadLine() ?? string.Empty);
     }
 
@@ -122,19 +50,48 @@ public class ConsoleInputProvider : IInputProvider
 /// <summary>
 /// An implementation of IReportOutputProvider that prints to the console.
 /// </summary>
-public class ConsoleReporter : IReportOutputProvider
+public class ConsoleReporter : IOutputProvider
 {
+    /// <summary>
+    /// Gets the name of the file currently being processed.
+    /// </summary>
+    public string CurrentFileName { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the results for each file in this batch.
+    /// </summary>
+    public IList<FileResult> BatchResults { get; set; } = [];
+
+    /// <summary>
+    /// Sets <see cref="CurrentFileName"/> to <paramref name="name"/>.
+    /// </summary>
+    /// <param name="name">The name to assign to <see cref="CurrentFileName"/>.</param>
+    /// <returns><inheritdoc/></returns>
+    public async Task SetCurrentFile(string name)
+    {
+        this.CurrentFileName = name;
+        await Task.CompletedTask;
+    }
+
     /// <summary>
     /// <inheritdoc/>
     /// In this case, the output is the console, so we just use Console.Write.
     /// </summary>
     /// <param name="report"><inheritdoc/></param>
     /// <returns>A Task representing that the console has finished printing.</returns>
-    public Task ReportAsync(Report report)
+    public async Task ReportAsync(Report report)
     {
         Console.Write(report.ToAnsiString());
-        return Task.CompletedTask;
+        await Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Asynchronously reports progress to the console.
+    /// At the moment, this is not used, it simply implements the interface.
+    /// </summary>
+    /// <param name="ev"><inheritdoc/></param>
+    /// <returns>A Task representing that the console has reported progress.</returns>
+    public async Task ReportProgress(ProgressEvent ev) => await Task.CompletedTask;
 
     /// <summary>
     /// Prints the contents of <paramref name="dt"/> to the console.
@@ -194,20 +151,3 @@ public class ConsoleReporter : IReportOutputProvider
         await this.ReportAsync(new (sb.ToString()));
     }
 }
-
-// Vague idea for how to do reporting in Blazor
-// public class BlazorReporter : IReportOutputProvider
-// {
-//     private readonly MyComponent _owner;
-//     public BlazorReporter(MyComponent owner) => _owner = owner;
-
-// public async Task ReportAsync(Report report)
-//     {
-//         _owner.Messages.Add(report);
-//         await _owner.InvokeAsync(_owner.StateHasChanged);
-//     }
-// }
-
-// Blazor input handler will require a TaskCompletionSource to allow the
-// GetInputAsync call to block the uploader logic without freezing the server/browser.
-// Bind the submit button to SetResult on the TaskCompletionSource to resume the uploader
