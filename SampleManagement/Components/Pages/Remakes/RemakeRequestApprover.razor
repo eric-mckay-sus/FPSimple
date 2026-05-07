@@ -1,5 +1,4 @@
-@page "/request-remake"
-@inherits TableManager<RemakeRequest>
+@inherits TableManager<RemakeRequestText>
 
 <PageTitle>Request Sample Remake</PageTitle>
 
@@ -16,7 +15,7 @@
     else if (DataView.Any())
     {
         @* Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button *@
-        <TablePresenter T="RemakeRequest"
+        <TablePresenter T="RemakeRequestText"
                         Base="this"
                         OnExpand="() => {}" />
     }

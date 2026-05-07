@@ -1,0 +1,12 @@
+@page "/request-remake"
+@using Microsoft.AspNetCore.Components.Authorization
+
+@* This page is just for routing. The child components used here contain all the content & logic. *@
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <RemakeRequestApprover />
+    </Authorized>
+    <NotAuthorized>
+        <RemakeRequestCreator />
+    </NotAuthorized>
+</AuthorizeView>

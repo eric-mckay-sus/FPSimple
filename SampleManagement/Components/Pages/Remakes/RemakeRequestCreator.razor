@@ -1,0 +1,28 @@
+@inherits TableManager<RemakeRequestText>
+
+<PageTitle>Request Sample Remake</PageTitle>
+
+<h2>Request Sample Remake</h2>
+
+<div class="mt-4">
+    @if (this.IsLoading)
+    {
+        <div class="centered-container">
+            <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+        </div>
+
+    }
+    else if (DataView.Any())
+    {
+        @* Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button *@
+        <TablePresenter T="RemakeRequestText"
+                        Base="this"
+                        OnExpand="() => {}" />
+    }
+    else
+    {
+        <div class="text-center p-5 border rounded bg-light">
+            <p class="text-muted mb-0">No remakes requested yet.</p>
+        </div>
+    }
+</div>

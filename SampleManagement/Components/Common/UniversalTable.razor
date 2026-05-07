@@ -105,6 +105,14 @@
                                     <Icon Name="IconName.XLg" Size="IconSize.x4" Color="IconColor.Danger" />
                                 </button>
                             }
+                            @if (OnRemake.HasDelegate)
+                            {
+                                <button class="btn btn-link btn-action p-0 me-2"
+                                        @onclick="() => OnRemake.InvokeAsync(item)"
+                                        title="Request Remake">
+                                    <Icon Name="IconName.ArrowClockwise" Size="IconSize.x4" />
+                                </button>
+                            }
                             @* Only show the print button/checkbox if there's a print binding *@
                             @if (OnPrint.HasDelegate){
                                 @if (PrintModeEngaged)
@@ -139,7 +147,7 @@
     private T? _attentionItem { get; set; } // Allows the user to highlight a row for focus (no information shown)
     [Parameter] public string? TargetStyle { get; set; } // The highlight style for the target row
     private bool _isExpanded { get; set; } = false; // Tracks whether the table is in expanded view
-    private bool showActions => this.OnExpand.HasDelegate || this.OnPrint.HasDelegate || this.OnApprove.HasDelegate;
+    private bool showActions => this.OnExpand.HasDelegate || this.OnPrint.HasDelegate || this.OnApprove.HasDelegate || this.OnRemake.HasDelegate;
 
     private string GetRowClass(T item)
     {
@@ -213,6 +221,9 @@
     // Approval
     [Parameter] public EventCallback<T> OnApprove { get; set; } // The action to bind to approval
     [Parameter] public EventCallback<T> OnDeny { get; set; } // The action to bind to denial
+
+    // Remake request
+    [Parameter] public EventCallback<T> OnRemake { get; set; } // The action to bind to remake
 
     // Pagination Params
     [Parameter] public int CurrentPage { get; set; }
