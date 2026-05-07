@@ -24,6 +24,7 @@
         string GetDeleteMessage() => item switch
         {
             Sample sample => $"deny sample #{sample.DummySampleNum} for {sample.Model} on {sample.Line}",
+            RemakeRequestText request => $"deny remaking sample {request.SampleId} with reason {request.ReasonText}",
             _ => $"remove this {item?.GetType()}"
         };
     }

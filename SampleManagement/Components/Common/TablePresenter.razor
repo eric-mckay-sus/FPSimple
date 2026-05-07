@@ -17,6 +17,7 @@
     OnExpand="OnExpand"
     OnApprove="OnApprove"
     OnDeny="OnDeny"
+    OnRemake="OnRemake"
     Target="Target"
     TargetStyle="@TargetStyle"/>
 
@@ -31,6 +32,7 @@
     [Parameter] public EventCallback<T> OnExpand { get; set; }
     [Parameter] public EventCallback<T> OnApprove { get; set; }
     [Parameter] public EventCallback<T> OnDeny { get; set; }
+    [Parameter] public EventCallback<T> OnRemake { get; set; }
     [Parameter] public T? Target { get; set; }
     [Parameter] public string? TargetStyle { get; set; }
 }

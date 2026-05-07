@@ -404,3 +404,10 @@ h1:focus {
     background-color: #d1e7dd !important;
     color: #0f5132 !important;
 }
+
+/* Hides increment/decrement arrows on number fields */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}

@@ -1,0 +1,101 @@
+@inherits TableManager<Sample>
+
+<PageTitle>Request Sample Remake</PageTitle>
+
+<h2>Request Sample Remake</h2>
+
+@* Remake request panel - appears when a row's remake button is clicked *@
+<div class="centered-container">
+    <div class="expandable-container mt-2 w-75">
+        <div class="expandable-wrapper @(pendingSample != null ? "is-expanded" : "")">
+            <div class="expandable-content">
+                <div class="form-card animate-fade-in">
+                    <h5 class="form-title">Request Remake</h5>
+                    <p class="text-muted">
+                        Sample #<strong>@pendingSample?.DummySampleNum</strong>
+                        &mdash; @pendingSample?.Model / @pendingSample?.Line
+                        <br />@pendingSample?.FailureMode
+                    </p>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Sample ID</label>
+                            <input class="form-control" value="@pendingSample?.SampleId" disabled />
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Dummy Sample #</label>
+                            <input class="form-control" value="@pendingSample?.DummySampleNum" disabled />
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Your Associate Number</label>
+                            <input type="number"
+                                   class="form-control"
+                                   @bind="formData.AssociateNum"
+                                   placeholder="Enter your associate number" />
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Reason for Remake</label>
+                            <select class="form-select form-control" @bind="formData.ReasonId">
+                                <option value="" disabled selected>-- Select a reason --</option>
+                                @foreach (RemakeReason reason in availableReasons)
+                                {
+                                    <option value="@reason.ReasonId">@reason.ReasonText</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger py-2 mt-2">@errorMessage</div>
+                    }
+
+                    <div class="form-actions">
+                        <button class="btn btn-outline-secondary me-2"
+                                disabled="@isSubmitting"
+                                @onclick="CancelRemake">
+                            Cancel
+                        </button>
+                        <button class="btn btn-primary"
+                                disabled="@(isSubmitting || formData.AssociateNum == null || formData.ReasonId == null)"
+                                @onclick="HandleSubmit">
+                            @if (isSubmitting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            }
+                            <Icon Name="IconName.ArrowClockwise" /> Submit Request
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-4">
+    @if (this.IsLoading)
+    {
+        <div class="centered-container">
+            <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+        </div>
+
+    }
+    else if (DataView.Any())
+    {
+        @* Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button *@
+        <TablePresenter T="Sample"
+                        Base="this"
+                        Target="pendingSample"
+                        OnExpand="() => {}"
+                        OnRemake="HandleRemake" />
+    }
+    else
+    {
+        <div class="text-center p-5 border rounded bg-light">
+            <p class="text-muted mb-0">No remakes requested yet.</p>
+        </div>
+    }
+</div>
