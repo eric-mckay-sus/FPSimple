@@ -81,7 +81,9 @@
                             @* Only show other buttons if they have a bindings and we're not in print select mode *@
                             @if (!PrintModeEngaged){
                                 @if(OnExpand.HasDelegate){
-                                    <button class="btn btn-link btn-action p-0 text-secondary me-2" @onclick="async () => { _isExpanded = !_isExpanded; await OnExpand.InvokeAsync(item); }" title="Expand">
+                                    <button class="btn btn-link btn-action p-0 text-secondary me-2"
+                                            @onclick="async () => { _isExpanded = !_isExpanded; await OnExpand.InvokeAsync(item); }"
+                                            title="Expand">
                                         @if (_isExpanded) {
                                             <Icon Name="IconName.ArrowsCollapseVertical" Size="IconSize.x4" />
                                         }

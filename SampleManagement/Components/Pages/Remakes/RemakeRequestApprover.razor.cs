@@ -6,8 +6,11 @@ namespace SampleManagement.Components.Pages.Remakes;
 
 using BlazorBootstrap;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Primitives;
+
 using SampleManagement.Components.Common;
 
 /// <summary>
@@ -50,6 +53,12 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
         }
 
         await base.OnInitializedAsync();
+
+        Dictionary<string, StringValues> query = QueryHelpers.ParseQuery(new Uri(this.Navigation.Uri).Query);
+        if (query.TryGetValue("sampleId", out StringValues raw) && int.TryParse(raw, out int sampleId))
+        {
+            await this.PreloadSampleAsync(sampleId);
+        }
     }
 
     /// <summary>
@@ -60,8 +69,29 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
     protected override IQueryable<RemakeRequestText> ApplyFilters(IQueryable<RemakeRequestText> query)
         => query.Where(r => r.IsActive);
 
+    private async Task PreloadSampleAsync(int sampleId)
+    {
+        using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
+        RemakeRequestText? request = await context.ViewRemakeRequests
+            .FirstOrDefaultAsync(r => r.SampleId == sampleId);
+
+        if (request == null)
+        {
+            // Clean URL and report error
+            this.Navigation.NavigateTo(this.Navigation.GetUriWithQueryParameter("sampleId", (string?)null));
+            this.ToastService.Notify(new (ToastType.Warning, $"No pending remake request found for Sample #{sampleId}. It may have been already processed."));
+        }
+        else
+        {
+            // Automatically open the approval UI for this specific request
+            this.HandleApprove(request);
+        }
+    }
+
     private void HandleApprove(RemakeRequestText request)
     {
+        // Update the URL to match the sample being staged for approval
+        this.Navigation.NavigateTo(this.Navigation.GetUriWithQueryParameter("sampleId", request.SampleId));
         if (request.Equals(this.pendingRequest))
         {
             this.CancelApproval();
@@ -76,6 +106,9 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
     {
         this.pendingRequest = null;
         this.approvalError = null;
+
+        // Clear the sample ID URL parameter
+        this.Navigation.NavigateTo(this.Navigation.GetUriWithQueryParameter("sampleId", (string?)null));
     }
 
     private async Task ConfirmApproval()

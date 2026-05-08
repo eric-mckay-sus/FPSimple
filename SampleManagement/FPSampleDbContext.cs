@@ -478,6 +478,27 @@ public class RemakeRequestText
     [Column("note")]
     [Verbose]
     public string? Note { get; set; }
+
+    /// <summary>
+    /// Remake requests are equal if they reference the same sample ID.
+    /// </summary>
+    /// <param name="obj">The object to compare.</param>
+    /// <returns>True when the objects represent the same remake request.</returns>
+    public override bool Equals(object? obj)
+    {
+        if (obj is RemakeRequestText other)
+        {
+            return this.SampleId == other.SampleId;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the hash code for this remake request.
+    /// </summary>
+    /// <returns>The remake request's hash code.</returns>
+    public override int GetHashCode() => this.SampleId.GetHashCode();
 }
 
 /// <summary>
