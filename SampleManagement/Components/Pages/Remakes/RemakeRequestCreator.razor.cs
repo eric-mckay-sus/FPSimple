@@ -5,7 +5,10 @@
 namespace SampleManagement.Components.Pages.Remakes;
 
 using BlazorBootstrap;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Primitives;
 
 /// <summary>
 /// Code-behind for RemakeRequestCreator.razor.
@@ -68,6 +71,12 @@ public partial class RemakeRequestCreator : TableManager<Sample>
         this.availableReasons = await context.RemakeReasons.OrderBy(r => r.ReasonId).ToListAsync();
 
         await base.OnInitializedAsync();
+
+        Dictionary<string, StringValues> query = QueryHelpers.ParseQuery(new Uri(this.Navigation.Uri).Query);
+        if (query.TryGetValue("sampleId", out StringValues raw) && int.TryParse(raw, out int sampleId))
+        {
+            await this.PreloadSampleAsync(sampleId);
+        }
     }
 
     /// <summary>
@@ -79,12 +88,51 @@ public partial class RemakeRequestCreator : TableManager<Sample>
         => query.Where(s => s.IsActive && !this.pendingRemakeIds.Contains(s.SampleId));
 
     /// <summary>
+    /// Verifies a sample ID and prompts for a remake if one is found.
+    /// </summary>
+    /// <param name="sampleId">The sample ID to verify and load.</param>
+    /// <returns>A Task representing that the sample is ready.</returns>
+    private async Task PreloadSampleAsync(int sampleId)
+    {
+        using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
+        Sample? sample = await context.Samples
+            .FirstOrDefaultAsync(s => s.SampleId == sampleId);
+
+        string? validationError = null;
+
+        if (sample == null)
+        {
+            validationError = $"Sample #{sampleId} was not found.";
+        }
+        else if (!sample.IsActive)
+        {
+            validationError = $"Sample #{sampleId} is inactive and cannot be remade.";
+        }
+        else if (this.pendingRemakeIds.Contains(sampleId))
+        {
+            validationError = $"Sample #{sampleId} already has a pending remake request.";
+        }
+        else
+        {
+            this.HandleRemake(sample);
+        }
+
+        if (validationError != null)
+        {
+            this.Navigation.NavigateTo(this.Navigation.GetUriWithQueryParameter("sampleId", (string?)null));
+            this.ToastService.Notify(new (ToastType.Warning, validationError));
+        }
+    }
+
+    /// <summary>
     /// Sets the pending sample to the selected row, expanding the form.
     /// If the same row is clicked again, the form collapses (toggle behavior matching ApproveSamples).
     /// </summary>
     /// <param name="sample">The sample for which a remake is being requested.</param>
     private void HandleRemake(Sample sample)
     {
+        // Update the URL to match the sample being staged for remake request
+        this.Navigation.NavigateTo(this.Navigation.GetUriWithQueryParameter("sampleId", sample.SampleId));
         if (sample.Equals(this.pendingSample))
         {
             this.CancelRemake();
@@ -104,6 +152,9 @@ public partial class RemakeRequestCreator : TableManager<Sample>
         this.pendingSample = null;
         this.formData = new ();
         this.errorMessage = null;
+
+        // Clear the sample ID URL parameter
+        this.Navigation.NavigateTo(this.Navigation.GetUriWithQueryParameter("sampleId", (string?)null));
     }
 
     /// <summary>

@@ -141,6 +141,12 @@ public partial class CreateSample : TableManager<Sample>
     }
 
     /// <summary>
+    /// Navigates to the remake page with the desired sample.
+    /// </summary>
+    /// <param name="sample">The sample for which to request a remake.</param>
+    private void HandleNavigateToRemake(Sample sample) => this.Navigation.NavigateTo($"/request-remake?sampleId={sample.SampleId}");
+
+    /// <summary>
     /// Filters the autofill lists based on what fields in the add form have values.
     /// </summary>
     /// <returns>A Task representing that filters have been refreshed.</returns>

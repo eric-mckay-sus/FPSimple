@@ -72,6 +72,12 @@ public class TableManager<T> : ComponentBase
     public string SortDir { get; set; } = "none";
 
     /// <summary>
+    /// Gets or sets the navigation manager used to jump between pages.
+    /// </summary>
+    [Inject]
+    private protected NavigationManager Navigation { get; set; } = default!;
+
+    /// <summary>
     /// Gets or sets the thread-safe DB context generator.
     /// </summary>
     [Inject]

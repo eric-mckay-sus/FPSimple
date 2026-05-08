@@ -78,40 +78,40 @@
                     }
                     @if (this.showActions) {
                         <td>
-                            @* Only show the expand button if there's an expand binding and we're not in print select mode *@
-                            @if (OnExpand.HasDelegate && !PrintModeEngaged){
-                                <button class="btn btn-link btn-action p-0 text-secondary me-2" @onclick="async () => { _isExpanded = !_isExpanded; await OnExpand.InvokeAsync(item); }" title="Expand">
-                                    @if (_isExpanded)
-                                    {
-                                        <Icon Name="IconName.ArrowsCollapseVertical" Size="IconSize.x4" />
-                                    }
-                                    else
-                                    {
-                                        <Icon Name="IconName.ArrowsExpandVertical" Size="IconSize.x4" />
-                                    }
-                                </button>
-                            }
-                            @if (OnApprove.HasDelegate){
-                                <button class="btn btn-link btn-action p-0 me-2"
-                                        @onclick="() => OnApprove.InvokeAsync(item)"
-                                        title="Approve">
-                                    <Icon Name="IconName.CheckLg" Size="IconSize.x4" Color="IconColor.Success" />
-                                </button>
-                            }
-                            @if (OnRemake.HasDelegate)
-                            {
-                                <button class="btn btn-link btn-action p-0 me-2"
-                                        @onclick="() => OnRemake.InvokeAsync(item)"
-                                        title="Request Remake">
-                                    <Icon Name="IconName.ArrowClockwise" Size="IconSize.x4" />
-                                </button>
-                            }
-                            @if (OnDeny.HasDelegate){
-                                <button class="btn btn-link btn-action p-0 me-2"
-                                        @onclick="() => OnDeny.InvokeAsync(item)"
-                                        title="Deny">
-                                    <Icon Name="IconName.XLg" Size="IconSize.x4" Color="IconColor.Danger" />
-                                </button>
+                            @* Only show other buttons if they have a bindings and we're not in print select mode *@
+                            @if (!PrintModeEngaged){
+                                @if(OnExpand.HasDelegate){
+                                    <button class="btn btn-link btn-action p-0 text-secondary me-2" @onclick="async () => { _isExpanded = !_isExpanded; await OnExpand.InvokeAsync(item); }" title="Expand">
+                                        @if (_isExpanded) {
+                                            <Icon Name="IconName.ArrowsCollapseVertical" Size="IconSize.x4" />
+                                        }
+                                        else {
+                                            <Icon Name="IconName.ArrowsExpandVertical" Size="IconSize.x4" />
+                                        }
+                                    </button>
+                                }
+                                @if (OnApprove.HasDelegate){
+                                    <button class="btn btn-link btn-action p-0 me-2"
+                                            @onclick="() => OnApprove.InvokeAsync(item)"
+                                            title="Approve">
+                                        <Icon Name="IconName.CheckLg" Size="IconSize.x4" Color="IconColor.Success" />
+                                    </button>
+                                }
+                                @if (OnRemake.HasDelegate)
+                                {
+                                    <button class="btn btn-link btn-action p-0 me-2"
+                                            @onclick="() => OnRemake.InvokeAsync(item)"
+                                            title="Request Remake">
+                                        <Icon Name="IconName.ArrowClockwise" Size="IconSize.x4" />
+                                    </button>
+                                }
+                                @if (OnDeny.HasDelegate){
+                                    <button class="btn btn-link btn-action p-0 me-2"
+                                            @onclick="() => OnDeny.InvokeAsync(item)"
+                                            title="Deny">
+                                        <Icon Name="IconName.XLg" Size="IconSize.x4" Color="IconColor.Danger" />
+                                    </button>
+                                }
                             }
                             @* Only show the print button/checkbox if there's a print binding *@
                             @if (OnPrint.HasDelegate){

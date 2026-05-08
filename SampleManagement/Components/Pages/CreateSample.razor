@@ -130,6 +130,7 @@
         <TablePresenter T="Sample"
                         Base="this"
                         OnExpand="() => {}"
+                        OnRemake="HandleNavigateToRemake"
                         OnPrint="args => HandlePrint(args)"
                         PrintModeEngaged="printModeEngaged"
                         @bind-SelectedForPrint="selectedForPrint" />
