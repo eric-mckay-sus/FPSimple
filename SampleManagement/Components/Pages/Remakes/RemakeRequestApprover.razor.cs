@@ -52,6 +52,14 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
         await base.OnInitializedAsync();
     }
 
+    /// <summary>
+    /// Filters out all already approved remake requests.
+    /// </summary>
+    /// <param name="query"><inheritdoc/></param>
+    /// <returns>The <paramref name="query"/>, with filters applied.</returns>
+    protected override IQueryable<RemakeRequestText> ApplyFilters(IQueryable<RemakeRequestText> query)
+        => query.Where(r => r.IsActive);
+
     private void HandleApprove(RemakeRequestText request)
     {
         if (request.Equals(this.pendingRequest))
@@ -104,7 +112,7 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
     }
 
     /// <summary>
-    /// Shows the delete dialog, and if confirmed, remove from underlying table in the DB (then update view).
+    /// Shows the delete dialog, and if confirmed, deactivate in the underlying table in the DB (then update view).
     /// </summary>
     /// <param name="request">The sample to deny.</param>
     /// <returns>A Task representing that <paramref name="request"/> has been removed and the view has been updated.</returns>
@@ -119,7 +127,10 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
             }
 
             using FPSampleDbContext context = this.DbFactory.CreateDbContext();
-            await context.RemakeRequests.Where(x => x.SampleId == request.SampleId).ExecuteDeleteAsync();
+            await context.RemakeRequests
+                .Where(r => r.SampleId == request.SampleId)
+                .ExecuteUpdateAsync(deactivate => deactivate
+                    .SetProperty(r => r.IsActive, false));
             await this.RefreshData();
             this.ToastService.Notify(new (ToastType.Success, $"Successfully denied remake for sample #{request.SampleId}"));
         }

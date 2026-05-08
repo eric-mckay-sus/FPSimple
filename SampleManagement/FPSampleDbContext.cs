@@ -369,6 +369,18 @@ public class RemakeRequest
     public int SampleId { get; set; }
 
     /// <summary>
+    /// Gets or sets the model name of the sample to be remade.
+    /// </summary>
+    [Column("model")]
+    public string? Model { get; set; }
+
+    /// <summary>
+    /// Gets or sets the line name of the sample to be remade.
+    /// </summary>
+    [Column("workCenterCode")]
+    public string? Line { get; set; }
+
+    /// <summary>
     /// Gets or sets the dummy sample number of the sample to be remade.
     /// </summary>
     [Column("dummySampleNum")]
@@ -391,10 +403,22 @@ public class RemakeRequest
     /// </summary>
     [Column("requestTime")]
     public DateTime RequestTime { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this remake request is pending.
+    /// </summary>
+    [Column("isActive")]
+    public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional note to be recorded with the remake request.
+    /// </summary>
+    [Column("note")]
+    public string? Note { get; set; }
 }
 
 /// <summary>
-/// Represents a remake request record in the database.
+/// Represents a remake request record in the database, with reason lookup.
 /// </summary>
 [Keyless]
 public class RemakeRequestText
@@ -406,16 +430,28 @@ public class RemakeRequestText
     public int SampleId { get; set; }
 
     /// <summary>
+    /// Gets or sets the model name of the sample to be remade.
+    /// </summary>
+    [Column("model")]
+    public string? Model { get; set; }
+
+    /// <summary>
+    /// Gets or sets the line name of the sample to be remade.
+    /// </summary>
+    [Column("workCenterCode")]
+    public string? Line { get; set; }
+
+    /// <summary>
     /// Gets or sets the dummy sample number of the sample to be remade.
     /// </summary>
     [Column("dummySampleNum")]
     public short DummySampleNum { get; set; }
 
     /// <summary>
-    /// Gets or sets the associate number of the associate requesting the remake.
+    /// Gets or sets the name of the associate requesting the remake.
     /// </summary>
-    [Column("requesterNum")]
-    public int RequesterNum { get; set; }
+    [Column("associateName")]
+    public string? RequesterName { get; set; }
 
     /// <summary>
     /// Gets or sets the remake request reason text.
@@ -428,6 +464,20 @@ public class RemakeRequestText
     /// </summary>
     [Column("requestTime")]
     public DateTime RequestTime { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this remake request is pending.
+    /// </summary>
+    [Column("isActive")]
+    [Verbose]
+    public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional note to be recorded with the remake request.
+    /// </summary>
+    [Column("note")]
+    [Verbose]
+    public string? Note { get; set; }
 }
 
 /// <summary>

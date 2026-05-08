@@ -15,6 +15,11 @@
                     <p class="text-body-secondary">
                         Sample #<strong>@pendingRequest?.SampleId</strong>:<br/>
                         Reason: @pendingRequest?.ReasonText
+                        @if (!string.IsNullOrEmpty(pendingRequest?.Note))
+                        {
+                            <br />
+                            <span>Note: @pendingRequest.Note</span>
+                        }
                     </p>
                     @if (!string.IsNullOrEmpty(approvalError))
                     {
@@ -56,6 +61,7 @@
                         Base="this"
                         Target="pendingRequest"
                         TargetStyle="table-success"
+                        OnExpand="() => {}"
                         OnApprove="HandleApprove"
                         OnDeny="HandleDeny" />
     }
