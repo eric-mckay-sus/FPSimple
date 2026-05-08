@@ -226,7 +226,7 @@ public class TableManager<T> : ComponentBase
     /// </summary>
     /// <param name="query">The query to which the sorts should be appended.</param>
     /// <returns>An IQueryable object with sorts applied.</returns>
-    private IQueryable<T> ApplySorting(IQueryable<T> query)
+    protected IQueryable<T> ApplySorting(IQueryable<T> query)
     {
         if (this.SortDir == "none" || string.IsNullOrWhiteSpace(this.CurrentSortColumn))
         {

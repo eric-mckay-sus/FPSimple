@@ -75,16 +75,32 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
         RemakeRequestText? request = await context.ViewRemakeRequests
             .FirstOrDefaultAsync(r => r.SampleId == sampleId);
 
-        if (request == null)
+        if (request != null)
         {
-            // Clean URL and report error
-            this.Navigation.NavigateTo(this.Navigation.GetUriWithQueryParameter("sampleId", (string?)null));
-            this.ToastService.Notify(new (ToastType.Warning, $"No pending remake request found for Sample #{sampleId}. It may have been already processed."));
+            // Recreate the query
+            IQueryable<RemakeRequestText> query = this.ApplyFilters(context.ViewRemakeRequests.AsQueryable());
+            IQueryable<RemakeRequestText> sortedQuery = this.ApplySorting(query);
+
+            // Fetch IDs to find the index
+            int[] idList = await sortedQuery.Select(s => s.SampleId).ToArrayAsync();
+            int index = Array.IndexOf(idList, sampleId);
+
+            if (index != -1)
+            {
+                // Calculate and jump to the correct page
+                int targetPage = (index / this.PageSize) + 1;
+                if (this.CurrentPage != targetPage)
+                {
+                    await this.ChangePage(targetPage);
+                }
+
+                this.HandleApprove(request);
+            }
         }
         else
         {
-            // Automatically open the approval UI for this specific request
-            this.HandleApprove(request);
+            this.Navigation.NavigateTo(this.Navigation.GetUriWithQueryParameter("sampleId", (string?)null));
+            this.ToastService.Notify(new (ToastType.Warning, $"No pending remake request found for Sample #{sampleId}. It may have been already processed."));
         }
     }
 

@@ -13,7 +13,8 @@
                 <div class="form-card animate-fade-in">
                     <h5 class="form-title">Approve Remake</h5>
                     <p class="text-body-secondary">
-                        Sample #<strong>@pendingRequest?.SampleId</strong>:<br/>
+                        @pendingRequest?.Model / @pendingRequest?.Line —
+                        Sample #<strong>@pendingRequest?.DummySampleNum</strong>:<br/>
                         Reason: @pendingRequest?.ReasonText
                         @if (!string.IsNullOrEmpty(pendingRequest?.Note))
                         {
