@@ -65,21 +65,19 @@
     }
 </div>
 
-<div class="mt-4">
-    @if (this.IsLoading)
-    {
-        <div class="centered-container">
-            <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
-        </div>
-    }
-    else if (DataView.Any())
-    {
-        <TablePresenter T="ModelLine" Base="this" />
-    }
-    else
-    {
-        <div class="text-center p-5 border rounded bg-light">
-            <p class="text-muted mb-0">No model mappings registered yet.</p>
-        </div>
-    }
-</div>
+@if (this.IsLoading)
+{
+    <div class="centered-container">
+        <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+    </div>
+}
+else if (DataView.Any())
+{
+    <TablePresenter T="ModelLine" Base="this" />
+}
+else
+{
+    <div class="text-center p-5 border rounded bg-light">
+        <p class="text-muted mb-0">No model mappings registered yet.</p>
+    </div>
+}

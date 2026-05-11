@@ -4,21 +4,21 @@
 
 <PageTitle>Approve Samples</PageTitle>
 
-<h2>Sample Approval</h2>
+<h2 class="mb-2">Sample Approval</h2>
 
 @* Approval panel - appears when a row's approve button is clicked *@
 <div class="centered-container">
-    <div class="expandable-container mt-2 w-75">
+    <div class="expandable-container w-75">
         <div class="expandable-wrapper @(pendingSample != null ? "is-expanded" : "")">
             <div class="expandable-content">
-                <div class="form-card animate-fade-in">
-                    <h5 class="form-title">Approve Sample</h5>
+                <div class="form-card animate-fade-in" style="min-height: 319px">
+                    <h5 class="form-title mb-2">Approve Sample</h5>
                     <p class="text-muted">
                         @pendingSample?.Model / @pendingSample?.Line —
                         Sample #<strong>@pendingSample?.DummySampleNum</strong>:<br/>@pendingSample?.FailureMode
                     </p>
                     <div class="row align-items-end">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-4 mb-1">
                             <label class="form-label">Expiration Date</label>
                             <input type="date"
                                 class="form-control"
@@ -50,31 +50,29 @@
     </div>
 </div>
 
-<div class="mt-4">
-    @if (this.IsLoading)
-    {
-        <div class="centered-container">
-            <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
-        </div>
+@if (this.IsLoading)
+{
+    <div class="centered-container">
+        <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+    </div>
 
-    }
-    else if (DataView.Any())
-    {
-        @* Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button *@
-        <TablePresenter T="Sample"
-                        Base="this"
-                        Target="pendingSample"
-                        TargetStyle="table-success"
-                        OnExpand="() => {}"
-                        OnApprove="HandleApprove"
-                        OnDeny="HandleDeny" />
-    }
-    else
-    {
-        <div class="text-center p-5 border rounded bg-light">
-            <p class="text-muted mb-0">No samples registered yet.</p>
-        </div>
-    }
-</div>
+}
+else if (DataView.Any())
+{
+    @* Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button *@
+    <TablePresenter T="Sample"
+                    Base="this"
+                    Target="pendingSample"
+                    TargetStyle="table-success"
+                    OnExpand="() => {}"
+                    OnApprove="HandleApprove"
+                    OnDeny="HandleDeny" />
+}
+else
+{
+    <div class="text-center p-5 border rounded bg-light">
+        <p class="text-muted mb-0">No samples registered yet.</p>
+    </div>
+}
 
 <DeleteDialog @ref="DeleteDialog" />

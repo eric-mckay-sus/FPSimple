@@ -8,7 +8,7 @@
 <div class="expandable-container">
     <div class="expandable-wrapper @(isFormExpanded ? "is-expanded" : "")">
         <div class="expandable-content">
-            <div class="form-card">
+            <div class="form-card" style="min-height: 322px">
                 <EditForm Model="@formData" OnValidSubmit="HandleSubmit">
                     <DataAnnotationsValidator />
 
@@ -86,11 +86,14 @@
             <h4>Select one or more samples, then press "Confirm Print" to confirm or "Cancel Print" to cancel.</h4>
         </div>
     </div>
-    <div class="expandable-wrapper @(isPrinting ? "is-expanded" : "") d-flex justify-content-end mb-2">
-        <Spinner Color="SpinnerColor.Primary" Class="width: 3rem; height: 3rem;" />
+    <div class="expandable-wrapper @(isPrinting ? "is-expanded" : "")" style="display: @(isPrinting ? "block" : "none");">
+        @* Have to nest so grid can be used for expansion and flex can be used for centering *@
+        <div class="d-flex justify-content-end pb-1">
+            <Spinner Color="SpinnerColor.Primary" />
+        </div>
     </div>
 
-    <div class="d-flex justify-content-end">
+    <div class="d-flex justify-content-end mb-1">
         @if (printModeEngaged)
         {
             // If somehow the printCts is null during an print, there is no way to cancel it
@@ -116,7 +119,7 @@
     </div>
 </div>
 
-<div class="mt-4">
+<div class="mb-1">
     @if (this.IsLoading)
     {
         <div class="centered-container">

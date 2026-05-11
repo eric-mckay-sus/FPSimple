@@ -24,9 +24,8 @@ public static class Program
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
         // Database Configuration
-        string? connectionString = builder.Configuration["ConnectionStrings__DefaultConnection"];
         builder.Services.AddDbContextFactory<FPSampleDbContext>(options =>
-            options.UseSqlServer(connectionString));
+            options.UseSqlServer(Config.GetConnectionString()));
 
         builder.Services.AddScoped<IUserIdentityService, UserIdentityService>();
         builder.Services.AddMemoryCache();
