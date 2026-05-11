@@ -13,7 +13,7 @@ using InterProcessIO;
 
 /// <summary>
 /// Minimal table logic for loading and paging data from <see cref="FPSampleDbContext"/>.
-/// Designed to provide the data needed by <c>UniversalTable</c> without filters or UI-only services.
+/// Designed to provide the data needed by <see cref="Components.Common.UniversalTable{T}"/> for display.
 /// </summary>
 /// <typeparam name="T">The EF entity type to load.</typeparam>
 public class TableManager<T> : ComponentBase
@@ -42,7 +42,7 @@ public class TableManager<T> : ComponentBase
     public bool IsLoading { get; private set; }
 
     /// <summary>
-    /// Gets the current page number (always clamped between 0 and <see cref="TotalPages"/>, inclusive).
+    /// Gets the current page number (always clamped between 1 and <see cref="TotalPages"/>, inclusive).
     /// </summary>
     public int CurrentPage { get; private set; } = 1;
 

@@ -6,6 +6,7 @@ namespace SampleManagement;
 
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
+
 using SampleManagement.Authentication;
 using SampleManagement.Components;
 using InterProcessIO;
