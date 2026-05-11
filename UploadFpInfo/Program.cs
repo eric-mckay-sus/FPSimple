@@ -172,7 +172,7 @@ public class FPSheetUploader
 
         string sql = @"
             SELECT COUNT(*) FROM dbo.ModelToLine
-                   WHERE shortDesc LIKE @model";
+                   WHERE shortDesc = @model";
 
         using SqlCommand cmd = new (sql, conn);
         cmd.Parameters.AddWithValue("@model", toValidate);
@@ -218,14 +218,14 @@ public class FPSheetUploader
         using SqlCommand cmd = new (sql, conn);
 
         // Mapping parameters from the DataRow
-        cmd.Parameters.AddWithValue("@model", dr["model"]);
-        cmd.Parameters.AddWithValue("@revision", dr["revision"]);
-        cmd.Parameters.AddWithValue("@issueDate", dr["issueDate"]);
-        cmd.Parameters.AddWithValue("@issuer", dr["issuer"]);
-        cmd.Parameters.AddWithValue("@failureMode", dr["failureMode"]);
-        cmd.Parameters.AddWithValue("@rank", dr["rank"]);
-        cmd.Parameters.AddWithValue("@location", dr["location"]);
-        cmd.Parameters.AddWithValue("@dummySampleNum", dr["dummySampleNum"]);
+        cmd.Parameters.Add("@model", SqlDbType.VarChar, 32).Value = dr["model"];
+        cmd.Parameters.Add("@revision", SqlDbType.TinyInt).Value = dr["revision"];
+        cmd.Parameters.Add("@issueDate", SqlDbType.Date).Value = dr["issueDate"];
+        cmd.Parameters.Add("@issuer", SqlDbType.VarChar, 32).Value = dr["issuer"];
+        cmd.Parameters.Add("@failureMode", SqlDbType.VarChar, 100).Value = dr["failureMode"];
+        cmd.Parameters.Add("@rank", SqlDbType.Char, 1).Value = dr["rank"];
+        cmd.Parameters.Add("@location", SqlDbType.VarChar, 100).Value = dr["location"];
+        cmd.Parameters.Add("@dummySampleNum", SqlDbType.SmallInt).Value = dr["dummySampleNum"];
 
         await cmd.ExecuteNonQueryAsync();
     }

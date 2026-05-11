@@ -169,6 +169,7 @@ public static partial class FPUploadUtilities
 
     /// <summary>
     /// Locates and reads the text of a cell with the specified row-col 'coordinates'.
+    /// Redirects to <seealso cref="GetCellText(ICell, CellType)"/>.
     /// </summary>
     /// <param name="row">The row object containing the desired data (and providing the y-coordinate).</param>
     /// <param name="colIndex">The x-coordinate of the data to get.</param>
@@ -181,28 +182,21 @@ public static partial class FPUploadUtilities
         }
 
         ICell cell = row.GetCell(colIndex);
-        if (cell == null)
-        {
-            return string.Empty;
-        }
-
-        if (cell.CellType == CellType.Formula)
-        {
-            return ResolveCellText(cell, cell.CachedFormulaResultType);
-        }
-
-        return ResolveCellText(cell, cell.CellType);
+        return GetCellText(cell, cell.CellType);
     }
 
     /// <summary>
     /// Reads the data inside a cell object based on its type.
+    /// If the cell is a formula, ignores the actual contents and gets the value from the last time the formula was computed (last time this file was opened in Excel).
+    /// If a cell targeted by a formula is ever written to programmatically, the cached formula result will NOT update to match in the same read.
     /// </summary>
     /// <param name="cell">The cell object to read.</param>
     /// <param name="type">The datatype in the cell.</param>
     /// <returns>A string representation of the data in the specified cell.</returns>
-    public static string ResolveCellText(ICell cell, CellType type)
+    public static string GetCellText(ICell cell, CellType type)
     {
-        return type switch
+        CellType effective = type == CellType.Formula ? cell.CachedFormulaResultType : type;
+        return effective switch
         {
             CellType.Numeric => DateUtil.IsCellDateFormatted(cell)
                                 ? cell.DateCellValue?.ToString("yyyy-MM-dd") ?? string.Empty
@@ -225,7 +219,7 @@ public static partial class FPUploadUtilities
             return true;
         }
 
-        return row.Cells.All(c => string.IsNullOrWhiteSpace(ResolveCellText(c, c.CellType == CellType.Formula ? c.CachedFormulaResultType : c.CellType)));
+        return row.Cells.All(c => string.IsNullOrWhiteSpace(GetCellText(c, c.CellType)));
     }
 
     /// <summary>
@@ -291,6 +285,6 @@ public static partial class FPUploadUtilities
     [GeneratedRegex(@"#(\d+)")]
     private static partial Regex DummySampleExtractor();
 
-    [GeneratedRegex("[REV|R]")]
+    [GeneratedRegex("(?:REV|R)")]
     private static partial Regex RevisionNumberCleaner();
 }

@@ -207,7 +207,6 @@ public class ModelMappingUploader
             using SqlBulkCopy bulkCopy = new (connection, SqlBulkCopyOptions.Default, transaction);
             bulkCopy.DestinationTableName = "ModelToLine";
 
-            // This looks like RBAR, but it's really just an abstraction
             await bulkCopy.WriteToServerAsync(dr);
             await transaction.CommitAsync();
             await this.Report("Complete!\n", ReportLevel.SUCCESS);

@@ -72,7 +72,7 @@ h1:focus {
     height: 1.6rem; /* Define size */
     display: inline-block; /* Aligns with text if used inline */
     flex-shrink: 0;
-    transform: translate(-1px, -1px); /* The Stanley 'S' has more weight at the lower right, so shift it up and left to make it look nice */
+    transform: translate(-2px, -1px); /* The Stanley 'S' has more weight at the lower right, so shift it up and left to make it look nice */
 }
 
 .centered-container{
@@ -179,7 +179,7 @@ h1:focus {
     border: 1px solid #e0e0e0;
     border-radius: 8px;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
 }
 
 .form-title {
@@ -213,7 +213,7 @@ h1:focus {
 
 /* Button Alignment */
 .form-actions {
-    margin-top: 1.5rem;
+    margin-top: 1rem;
     display: flex;
     justify-content: flex-end;
     border-top: 1px solid #edf2f7;
@@ -230,6 +230,10 @@ h1:focus {
     opacity: 0;
     visibility: hidden;
     overflow: hidden;
+
+    /* Anything applied directly will override these, but inherit no margins */
+    margin: 0;
+    padding: 0;
 }
 
 /* When collapsing (fade out immediately) */
@@ -244,7 +248,7 @@ h1:focus {
     grid-template-rows: 1fr;
     opacity: 1;
     visibility: visible;
-    /* Delay the opacity so it starts halfway through the height expansion */
+    /* Delay the opacity so it starts partway through the height expansion */
     transition-delay: 0s, 0.2s, 0s;
 }
 
