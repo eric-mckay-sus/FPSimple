@@ -64,8 +64,7 @@ public partial class RemakeRequestCreator : TableManager<Sample>
     /// <returns>A Task representing that the page has loaded.</returns>
     protected override async Task OnInitializedAsync()
     {
-        this.CurrentSortColumn = "CreationDate";
-        this.SortDir = "descending";
+        this.SortList.Add(new ("CreationDate", SortDir.Desc));
 
         using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
         this.availableReasons = await context.RemakeReasons.OrderBy(r => r.ReasonId).ToListAsync();

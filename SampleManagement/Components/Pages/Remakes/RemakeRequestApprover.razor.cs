@@ -40,8 +40,7 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
     /// <returns>A Task representing that the page has loaded.</returns>
     protected override async Task OnInitializedAsync()
     {
-        this.CurrentSortColumn = "RequestTime";
-        this.SortDir = "descending";
+        this.SortList.Add(new ("RequestTime", SortDir.Desc));
         AuthenticationState authState = await this.AuthStateProvider.GetAuthenticationStateAsync();
 
         // Could check the auth role here, but that's done page-side

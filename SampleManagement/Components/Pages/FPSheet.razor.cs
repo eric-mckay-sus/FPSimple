@@ -134,8 +134,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
             this.availableModels = await context.ModelToLine.Select(m => m.ShortDescription).Distinct().ToListAsync();
         }
 
-        this.CurrentSortColumn = "IssueDate";
-        this.SortDir = "descending";
+        this.SortList.Add(new ("IssueDate", SortDir.Desc));
         await base.OnInitializedAsync();
     }
 

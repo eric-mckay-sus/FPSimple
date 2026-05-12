@@ -20,6 +20,11 @@ public class TableManager<T> : ComponentBase
     where T : class
 {
     /// <summary>
+    /// The maximum allowable sorts active at once.
+    /// </summary>
+    private static readonly byte MaxSorts = 2;
+
+    /// <summary>
     /// Gets or sets this upload page's input provider.
     /// </summary>
     [Inject]
@@ -62,14 +67,9 @@ public class TableManager<T> : ComponentBase
     public int TotalPages => this.PageSize > 0 ? (int)Math.Ceiling((double)this.TotalCount / this.PageSize) : 1;
 
     /// <summary>
-    /// Gets or sets the name of the column that results are currently being sorted by.
+    /// Gets the list of sorts to be applied to the query.
     /// </summary>
-    public string CurrentSortColumn { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the sort direction of the currently sorted column.
-    /// </summary>
-    public string SortDir { get; set; } = "none";
+    protected List<Sort> SortList { get; } = [];
 
     /// <summary>
     /// Gets or sets the navigation manager used to jump between pages.
@@ -127,44 +127,72 @@ public class TableManager<T> : ComponentBase
     }
 
     /// <summary>
-    /// Cycles through sort directions when column is toggled
-    /// Cycle order: None -> Asc -> Desc.
+    /// Cycle order: None -> Asc -> Desc. All sort columns are "drive to zero". Toggling an already-sorted column simply follows the cycle.
+    /// When a column is toggled to <see cref="SortDir.None"/>, the sort is removed from the list, freeing up a sort slot and promoting all lesser sorts.
+    /// For example, toggling column B with the sort list [{col A, asc}, {col B, desc}, {col C, asc}] promotes col C and leaves col A unaffected, resulting in [{col A, asc}, {col C, asc}]
+    /// The number of available sorts may be modified (to increase customization or to simplify) with <see cref="MaxSorts"/>.
+    /// When toggling a new column, it is assigned the highest available sort priority. If there are no open sort slots, it overwrites the lowest priority sort.
+    /// Sort priority is visualized with the subscript next to the sort arrow.
     /// </summary>
     /// <param name="columnName">The column to be toggled.</param>
     /// <returns>A Task representing that the sort has been applied.</returns>
     public async Task ToggleSort(string columnName)
     {
-        if (this.CurrentSortColumn != columnName)
-        { // If coming from none, save the column name (it's changed) and switch to asc
-            this.CurrentSortColumn = columnName;
-            this.SortDir = "ascending";
-        }
-        else if (this.SortDir == "ascending")
-        { // If coming from asc, only need to switch to desc
-            this.SortDir = "descending";
-        }
-        else
-        { // If coming from desc, switch to none and inform model no column is specified to sort
-            this.SortDir = "none";
-            this.CurrentSortColumn = string.Empty;
+        // Determines if the column being toggled is already being sorted
+        Sort? existingSort = this.SortList.FirstOrDefault(x => x.ColumnName == columnName);
+
+        // If this column is already being sorted, cycle the state, removing if deactivated
+        if (existingSort != null)
+        {
+            bool isActive = existingSort.Toggle();
+            if (!isActive)
+            {
+                this.SortList.Remove(existingSort);
+            }
         }
 
-        await this.RefreshData(); // because the sort parameters change we want a guaranteed refresh
+        // Otherwise, add it.
+        else
+        {
+            Sort newSort = new (columnName, SortDir.Asc);
+
+            // If there's an open slot, use it
+            if (this.SortList.Count < MaxSorts)
+            {
+                this.SortList.Add(newSort);
+            }
+
+            // If not, overwrite the last sort
+            else
+            {
+                this.SortList[^1] = newSort;
+            }
+        }
+
+        await this.RefreshData();
     }
 
     /// <summary>
-    /// Helper to render the arrow.
+    /// Helper to render the arrow for <paramref name="columnName"/>.
+    /// Denotes sort priority with the subscript attached to the arrow (primary sort gets no subscript).
     /// </summary>
     /// <param name="columnName">The column for which to update the sort icon.</param>
-    /// <returns>The Unicode arrow representing the sort direction.</returns>
+    /// <returns>The Unicode arrow representing the sort direction and sort priority.</returns>
     public string GetSortIcon(string columnName)
     {
-        if (this.CurrentSortColumn != columnName || this.SortDir == "none")
+        var sortEntry = this.SortList
+            .Select((s, i) => new { s.ColumnName, s.Direction, Index = i })
+            .FirstOrDefault(x => x.ColumnName == columnName);
+
+        if (sortEntry == null || sortEntry.Direction == SortDir.None)
         {
             return "↕";
         }
 
-        return this.SortDir == "ascending" ? "▲" : "▼";
+        string arrow = sortEntry.Direction == SortDir.Asc ? "▲" : "▼";
+
+        // Concatenate the arrow with its priority subscript. The primary sort gets no subscript.
+        return arrow + GetSubscript(sortEntry.Index + 1);
     }
 
     /// <summary>
@@ -228,12 +256,59 @@ public class TableManager<T> : ComponentBase
     /// <returns>An IQueryable object with sorts applied.</returns>
     protected IQueryable<T> ApplySorting(IQueryable<T> query)
     {
-        if (this.SortDir == "none" || string.IsNullOrWhiteSpace(this.CurrentSortColumn))
+        // If there is no sort, simply order by itself (PK for DB objects)
+        if (this.SortList.Count == 0)
         {
-            return query;
+            return query.OrderBy(x => x);
         }
 
-        // Null is the smallest value for any column, so it clutters ascending sorts
-        return query.Where($"{this.CurrentSortColumn} != null").OrderBy($"{this.CurrentSortColumn} {this.SortDir}");
+        bool isFirst = true;
+
+        // Iterate through all the sorts and apply them in series
+        foreach (Sort sort in this.SortList)
+        {
+            // Incomplete Sort objects shouldn't be in the list to begin with, but if they are, just ignore them
+            if (string.IsNullOrEmpty(sort.ColumnName))
+            {
+                continue;
+            }
+
+            string sortExpression = $"{sort.ColumnName} {Sort.SortDirString[sort.Direction]}";
+
+            // Ensure the first sort uses OrderBy instead of ThenBy, and throw flag to use ThenBy for remaining filters
+            if (isFirst)
+            {
+                query = query.Where($"{sort.ColumnName} != null").OrderBy(sortExpression);
+                isFirst = false;
+            }
+            else
+            {
+                query = ((IOrderedQueryable<T>)query).ThenBy(sortExpression);
+            }
+        }
+
+        return query;
+    }
+
+    /// <summary>
+    /// Converts an integer into Unicode subscript characters.
+    /// </summary>
+    private static string GetSubscript(int number)
+    {
+        // If it's the primary sort, we return empty to keep the UI clean
+        if (number == 1)
+        {
+            return string.Empty;
+        }
+
+        char[] subscriptDigits = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
+        string result = string.Empty;
+
+        foreach (char c in number.ToString())
+        {
+            result += subscriptDigits[c - '0'];
+        }
+
+        return result;
     }
 }

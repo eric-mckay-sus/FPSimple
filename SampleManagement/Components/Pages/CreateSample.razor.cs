@@ -124,8 +124,7 @@ public partial class CreateSample : TableManager<Sample>
     /// <returns>A Task representing that the page has loaded.</returns>
     protected override async Task OnInitializedAsync()
     {
-        this.CurrentSortColumn = "CreationDate";
-        this.SortDir = "descending";
+        this.SortList.Add(new ("CreationDate", SortDir.Desc));
         await base.OnInitializedAsync();
     }
 
