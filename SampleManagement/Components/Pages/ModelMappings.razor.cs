@@ -17,6 +17,11 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     private string? filePath;
 
     /// <summary>
+    /// Gets the message to show when <see cref="TableManager{T}.DataView"/> is empty.
+    /// </summary>
+    public override string EmptyMessage => "No model mappings matching these filters.";
+
+    /// <summary>
     /// When this page loads, wire the input provider's confirmation event to auto-open an alert (with flag).
     /// Also, set the output's OnNotify event to update the progress bar.
     /// </summary>

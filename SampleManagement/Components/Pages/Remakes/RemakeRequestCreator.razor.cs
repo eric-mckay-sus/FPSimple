@@ -44,6 +44,11 @@ public partial class RemakeRequestCreator : TableManager<Sample>
     private string? errorMessage;
 
     /// <summary>
+    /// Gets the message to display when <see cref="TableManager{T}.DataView"/> is empty.
+    /// </summary>
+    public override string EmptyMessage => "No samples matching these filters available for remake request.";
+
+    /// <summary>
     /// <inheritdoc/>
     /// </summary>
     /// <param name="keepPage">Whether to keep the page value (or reset it to 1).</param>

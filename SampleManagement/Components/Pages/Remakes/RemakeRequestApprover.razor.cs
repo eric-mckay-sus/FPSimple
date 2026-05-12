@@ -30,6 +30,11 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
     public AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
 
     /// <summary>
+    /// Gets the message to display when <see cref="TableManager{T}.DataView"/> is empty.
+    /// </summary>
+    public override string EmptyMessage => "No remakes pending approval matching these filters.";
+
+    /// <summary>
     /// Gets or sets the dialog to show upon pressing the 'deny' button for a row.
     /// </summary>
     private protected DeleteDialog DeleteDialog { get; set; } = default!;

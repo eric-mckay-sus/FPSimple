@@ -86,6 +86,11 @@ public partial class CreateSample : TableManager<Sample>
     private CancellationTokenSource? printCts;
 
     /// <summary>
+    /// Gets the message to display when <see cref="TableManager{T}.DataView"/> is empty.
+    /// </summary>
+    public override string EmptyMessage => "No samples matching these filters.";
+
+    /// <summary>
     /// Gets a value indicating whether the sample form is ready for a dummy sample number.
     /// </summary>
     private bool NotReadyForSampleNum =>

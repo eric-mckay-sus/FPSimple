@@ -52,6 +52,18 @@ public partial class UniversalTable<T>
     public IEnumerable<T>? Items { get; set; }
 
     /// <summary>
+    /// Gets or sets the message to display when <see cref="Items"/> is empty.
+    /// </summary>
+    [Parameter]
+    public string EmptyMessage { get; set; } = "No data found. Please refresh.";
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the query is loading.
+    /// </summary>
+    [Parameter]
+    public bool IsLoading { get; set; } = false;
+
+    /// <summary>
     /// Gets or sets the action to bind to the expand button being pressed.
     /// </summary>
     [Parameter]

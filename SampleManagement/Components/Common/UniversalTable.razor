@@ -45,123 +45,145 @@
     </div>
 }
 
-<div class="table-responsive-wrapper">
-    <table class="table res-table table-striped text-nowrap">
-        <thead>
-            <tr>
-                @foreach (var prop in GetVisibleProperties())
-                {
-                    var attribute = prop.GetCustomAttribute<ColumnAttribute>();
-                    string displayName = attribute?.Name ?? prop.Name;
-                    bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
-                    <th @onclick="() => OnSort.InvokeAsync(prop.Name)"
-                        class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (isExpanded ? "verbose-visible" : "verbose-hidden") : "")"
-                        style=@(OnSort.HasDelegate ? "cursor:pointer" : "cursor:auto")
-                        title=@(OnSort.HasDelegate ? $"Toggle sort for {displayName}" : "")>
-                            @displayName @SortIcon(prop.Name)
+@if (this.IsLoading)
+{
+    <div class="centered-container">
+        <Spinner Color="SpinnerColor.Primary" Style="width: 3rem; height: 3rem;" />
+    </div>
 
-                        @if (prop.Name == "Model" && ModelFilter != null)
-                        {
-                            <input class="form-control form-control-sm mt-1"
-                                id="model-filter"
-                                placeholder="Filter..."
-                                value="@ModelFilter.Value"
-                                @onclick:stopPropagation
-                                @oninput="e => _ = HandleFilterInput(ModelFilter, e.Value?.ToString())" />
-                        }
-
-                        @if (prop.Name == "Line" && LineFilter != null)
-                        {
-                            <input class="form-control form-control-sm mt-1"
-                                id="line-filter"
-                                placeholder="Filter..."
-                                value="@LineFilter.Value"
-                                @onclick:stopPropagation
-                                @oninput="e => _ = HandleFilterInput(LineFilter, e.Value?.ToString())" />
-                        }
-                    </th>
-                }
-                    @if (this.ShowActions){
-                    <th>Actions</th> @* For the expand, print, approve, and remake buttons *@
-                }
-            </tr>
-        </thead>
-        <tbody>
-            <Virtualize TItem="T" Items="@(Items?.ToList())" Context="item" OverscanCount="8" ItemSize="41">
-                <tr @key="item"
-                    @onclick="() => attentionItem=attentionItem?.Equals(item) == true ? default : item"
-                    class="@GetRowClass(item)">
+}
+else if (Items != null && Items.Any())
+{
+    <div class="table-responsive-wrapper">
+        <table class="table res-table table-striped text-nowrap">
+            <thead>
+                <tr class="filter-row bg-light">
                     @foreach (var prop in GetVisibleProperties())
                     {
-                        bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
-                        <td class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (isExpanded ? "verbose-visible" : "verbose-hidden") : "")">@(prop.GetValue(item)?.ToString() ?? "—")</td>
-                    }
-                    @if (this.ShowActions) {
                         <td>
-                            @* Only show other buttons if they have a bindings and we're not in print select mode *@
-                            @if (!PrintModeEngaged){
-                                @if(OnExpand.HasDelegate){
-                                    <button class="btn btn-link btn-action p-0 text-secondary me-2"
-                                            @onclick="async () => { isExpanded = !isExpanded; await OnExpand.InvokeAsync(item); }"
-                                            @onclick:stopPropagation
-                                            title="Expand">
-                                        @if (isExpanded) {
-                                            <Icon Name="IconName.ArrowsCollapseVertical" Size="IconSize.x4" />
-                                        }
-                                        else {
-                                            <Icon Name="IconName.ArrowsExpandVertical" Size="IconSize.x4" />
-                                        }
-                                    </button>
-                                }
-                                @if (OnApprove.HasDelegate){
-                                    <button class="btn btn-link btn-action p-0 me-2"
-                                            @onclick="() => OnApprove.InvokeAsync(item)"
-                                            @onclick:stopPropagation
-                                            title="Approve">
-                                        <Icon Name="IconName.CheckLg" Size="IconSize.x4" Color="IconColor.Success" />
-                                    </button>
-                                }
-                                @if (OnRemake.HasDelegate)
+                            @if (prop.Name == "Model" && ModelFilter != null)
                                 {
-                                    <button class="btn btn-link btn-action p-0 me-2"
-                                            @onclick="() => OnRemake.InvokeAsync(item)"
-                                            @onclick:stopPropagation
-                                            title="Request Remake">
-                                        <Icon Name="IconName.ArrowClockwise" Size="IconSize.x4" />
-                                    </button>
+                                    <input class="form-control form-control-sm mt-1"
+                                        id="model-filter"
+                                        placeholder="Filter..."
+                                        value="@ModelFilter.Value"
+                                        @onclick:stopPropagation
+                                        @oninput="e => _ = HandleFilterInput(ModelFilter, e.Value?.ToString())" />
                                 }
-                                @if (OnDeny.HasDelegate){
-                                    <button class="btn btn-link btn-action p-0 me-2"
-                                            @onclick="() => OnDeny.InvokeAsync(item)"
-                                            @onclick:stopPropagation
-                                            title="Deny">
-                                        <Icon Name="IconName.XLg" Size="IconSize.x4" Color="IconColor.Danger" />
-                                    </button>
-                                }
-                            }
-                            @* Only show the print button/checkbox if there's a print binding *@
-                            @if (OnPrint.HasDelegate){
-                                @if (PrintModeEngaged)
+
+                                @if (prop.Name == "Line" && LineFilter != null)
                                 {
-                                    <input type="checkbox"
-                                        class="form-check-input"
-                                        checked="@(SelectedForPrint?.Contains(item) ?? false)"
-                                        @onchange="e => HandleCheckboxChange(item, e.Value)" />
+                                    <input class="form-control form-control-sm mt-1"
+                                        id="line-filter"
+                                        placeholder="Filter..."
+                                        value="@LineFilter.Value"
+                                        @onclick:stopPropagation
+                                        @oninput="e => _ = HandleFilterInput(LineFilter, e.Value?.ToString())" />
                                 }
-                                else
-                                {
-                                    <button class="btn btn-link btn-action p-0"
-                                            @onclick="() => OnPrint.InvokeAsync(item)"
-                                            @onclick:stopPropagation
-                                            title="Print this item">
-                                        <Icon Name="IconName.Printer" Size="IconSize.x4" />
-                                    </button>
-                                }
-                            }
                         </td>
                     }
                 </tr>
-            </Virtualize>
-        </tbody>
-    </table>
-</div>
+                <tr>
+                    @foreach (var prop in GetVisibleProperties())
+                    {
+                        var attribute = prop.GetCustomAttribute<ColumnAttribute>();
+                        string displayName = attribute?.Name ?? prop.Name;
+                        bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
+                        <th @onclick="() => OnSort.InvokeAsync(prop.Name)"
+                            class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (isExpanded ? "verbose-visible" : "verbose-hidden") : "")"
+                            style=@(OnSort.HasDelegate ? "cursor:pointer" : "cursor:auto")
+                            title=@(OnSort.HasDelegate ? $"Toggle sort for {displayName}" : "")>
+                                @displayName @SortIcon(prop.Name)
+                        </th>
+                    }
+                        @if (this.ShowActions){
+                        <th>Actions</th> @* For the expand, print, approve, and remake buttons *@
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                <Virtualize TItem="T" Items="@(Items?.ToList())" Context="item" OverscanCount="8" ItemSize="41">
+                    <tr @key="item"
+                        @onclick="() => attentionItem=attentionItem?.Equals(item) == true ? default : item"
+                        class="@GetRowClass(item)">
+                        @foreach (var prop in GetVisibleProperties())
+                        {
+                            bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
+                            <td class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (isExpanded ? "verbose-visible" : "verbose-hidden") : "")">@(prop.GetValue(item)?.ToString() ?? "—")</td>
+                        }
+                        @if (this.ShowActions) {
+                            <td>
+                                @* Only show other buttons if they have a bindings and we're not in print select mode *@
+                                @if (!PrintModeEngaged){
+                                    @if(OnExpand.HasDelegate){
+                                        <button class="btn btn-link btn-action p-0 text-secondary me-2"
+                                                @onclick="async () => { isExpanded = !isExpanded; await OnExpand.InvokeAsync(item); }"
+                                                @onclick:stopPropagation
+                                                title="Expand">
+                                            @if (isExpanded) {
+                                                <Icon Name="IconName.ArrowsCollapseVertical" Size="IconSize.x4" />
+                                            }
+                                            else {
+                                                <Icon Name="IconName.ArrowsExpandVertical" Size="IconSize.x4" />
+                                            }
+                                        </button>
+                                    }
+                                    @if (OnApprove.HasDelegate){
+                                        <button class="btn btn-link btn-action p-0 me-2"
+                                                @onclick="() => OnApprove.InvokeAsync(item)"
+                                                @onclick:stopPropagation
+                                                title="Approve">
+                                            <Icon Name="IconName.CheckLg" Size="IconSize.x4" Color="IconColor.Success" />
+                                        </button>
+                                    }
+                                    @if (OnRemake.HasDelegate)
+                                    {
+                                        <button class="btn btn-link btn-action p-0 me-2"
+                                                @onclick="() => OnRemake.InvokeAsync(item)"
+                                                @onclick:stopPropagation
+                                                title="Request Remake">
+                                            <Icon Name="IconName.ArrowClockwise" Size="IconSize.x4" />
+                                        </button>
+                                    }
+                                    @if (OnDeny.HasDelegate){
+                                        <button class="btn btn-link btn-action p-0 me-2"
+                                                @onclick="() => OnDeny.InvokeAsync(item)"
+                                                @onclick:stopPropagation
+                                                title="Deny">
+                                            <Icon Name="IconName.XLg" Size="IconSize.x4" Color="IconColor.Danger" />
+                                        </button>
+                                    }
+                                }
+                                @* Only show the print button/checkbox if there's a print binding *@
+                                @if (OnPrint.HasDelegate){
+                                    @if (PrintModeEngaged)
+                                    {
+                                        <input type="checkbox"
+                                            class="form-check-input"
+                                            checked="@(SelectedForPrint?.Contains(item) ?? false)"
+                                            @onchange="e => HandleCheckboxChange(item, e.Value)" />
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-link btn-action p-0"
+                                                @onclick="() => OnPrint.InvokeAsync(item)"
+                                                @onclick:stopPropagation
+                                                title="Print this item">
+                                            <Icon Name="IconName.Printer" Size="IconSize.x4" />
+                                        </button>
+                                    }
+                                }
+                            </td>
+                        }
+                    </tr>
+                </Virtualize>
+            </tbody>
+        </table>
+    </div>
+}
+else
+{
+    <div class="text-center p-5 border rounded bg-light">
+        <p class="text-muted mb-0">@EmptyMessage</p>
+    </div>
+}

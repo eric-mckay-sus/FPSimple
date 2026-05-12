@@ -47,6 +47,11 @@ public class TableManager<T> : ComponentBase
     public bool IsLoading { get; private set; }
 
     /// <summary>
+    /// Gets the message to show when a query returns no results.
+    /// </summary>
+    public virtual string EmptyMessage { get; } = "No data found. Please refresh.";
+
+    /// <summary>
     /// Gets the current page number (always clamped between 1 and <see cref="TotalPages"/>, inclusive).
     /// </summary>
     public int CurrentPage { get; private set; } = 1;

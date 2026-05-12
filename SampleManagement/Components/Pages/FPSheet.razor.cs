@@ -49,6 +49,11 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     private CancellationTokenSource? logDebounce;
 
     /// <summary>
+    /// Gets the message to show when <see cref="TableManager{T}.DataView"/> is empty.
+    /// </summary>
+    public override string EmptyMessage => "No foolproof sheets registered with these filters";
+
+    /// <summary>
     /// Gets a value indicating whether the current prompt is for model name (or Excel column).
     /// </summary>
     private bool IsModelPrompt => this.currentPrompt != null && this.currentPrompt.Contains("C. Core");
