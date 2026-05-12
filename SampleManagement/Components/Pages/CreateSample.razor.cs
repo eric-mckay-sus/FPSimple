@@ -112,8 +112,8 @@ public partial class CreateSample : TableManager<Sample>
         this.allMappings = await context.ModelToLine.ToListAsync();
 
         // Initialize the UI lists with everything
-        this.availableModels = this.allMappings.Select(m => m.ShortDescription).Distinct().OrderBy(x => x).ToList();
-        this.availableLines = this.allMappings.Select(m => m.WorkCenterCode).Distinct().OrderBy(x => x).ToList();
+        this.availableModels = this.allMappings.Select(m => m.Model).Distinct().OrderBy(x => x).ToList();
+        this.availableLines = this.allMappings.Select(m => m.Line).Distinct().OrderBy(x => x).ToList();
 
         await base.RefreshData(keepPage);
     }
@@ -129,11 +129,27 @@ public partial class CreateSample : TableManager<Sample>
     }
 
     /// <summary>
-    /// Filters out inactive samples (so they are not inadvertently printed).
+    /// Filters out samples samples that are inactive and approved, so they are not inadvertently printed.
+    /// Also applies model/line filters if applicable.
     /// </summary>
     /// <param name="query"><inheritdoc/></param>
     /// <returns>The <paramref name="query"/> where remake date is null.</returns>
-    protected override IQueryable<Sample> ApplyFilters(IQueryable<Sample> query) => query.Where(s => s.IsActive == true || s.ApproverNum == null);
+    protected override IQueryable<Sample> ApplyFilters(IQueryable<Sample> query)
+    {
+        query = query.Where(s => s.IsActive == true || s.ApproverNum == null);
+
+        if (this.ModelFilter.Value != null && this.ModelFilter.IsActive)
+        {
+            query = query.Where(x => x.Model.Contains(this.ModelFilter.Value));
+        }
+
+        if (this.LineFilter.Value != null && this.LineFilter.IsActive)
+        {
+            query = query.Where(x => x.Line.Contains(this.LineFilter.Value));
+        }
+
+        return query;
+    }
 
     private static void DoNothing()
     {
@@ -164,8 +180,8 @@ public partial class CreateSample : TableManager<Sample>
         if (hasLine && !hasModel)
         {
             this.availableModels = this.allMappings
-                .Where(x => x.WorkCenterCode == this.formData.WorkCenterCode)
-                .Select(x => x.ShortDescription)
+                .Where(x => x.Line == this.formData.WorkCenterCode)
+                .Select(x => x.Model)
                 .OrderBy(x => x)
                 .Distinct().ToList();
         }
@@ -173,15 +189,15 @@ public partial class CreateSample : TableManager<Sample>
         // Otherwise, clear the line filter
         else if (!hasLine && !hasModel)
         {
-            this.availableModels = this.allMappings.Select(m => m.ShortDescription).Distinct().OrderBy(x => x).ToList();
+            this.availableModels = this.allMappings.Select(m => m.Model).Distinct().OrderBy(x => x).ToList();
         }
 
         // If model is selected, use it for filtering
         if (hasModel && !hasLine)
         {
             this.availableLines = this.allMappings
-                .Where(x => x.ShortDescription == this.formData.Model)
-                .Select(x => x.WorkCenterCode)
+                .Where(x => x.Model == this.formData.Model)
+                .Select(x => x.Line)
                 .OrderBy(x => x)
                 .Distinct().ToList();
         }
@@ -189,7 +205,7 @@ public partial class CreateSample : TableManager<Sample>
         // Otherwise, clear the model filter
         else if (!hasLine && !hasModel)
         {
-            this.availableLines = this.allMappings.Select(m => m.WorkCenterCode).Distinct().OrderBy(x => x).ToList();
+            this.availableLines = this.allMappings.Select(m => m.Line).Distinct().OrderBy(x => x).ToList();
         }
 
         // Update sample numbers when model is selected
@@ -227,8 +243,8 @@ public partial class CreateSample : TableManager<Sample>
         this.errorMessage = null;
 
         // Reload available lists
-        this.availableModels = this.allMappings.Select(m => m.ShortDescription).Distinct().OrderBy(x => x).ToList();
-        this.availableLines = this.allMappings.Select(m => m.WorkCenterCode).Distinct().OrderBy(x => x).ToList();
+        this.availableModels = this.allMappings.Select(m => m.Model).Distinct().OrderBy(x => x).ToList();
+        this.availableLines = this.allMappings.Select(m => m.Line).Distinct().OrderBy(x => x).ToList();
     }
 
     /// <summary>

@@ -80,11 +80,26 @@ public partial class RemakeRequestCreator : TableManager<Sample>
 
     /// <summary>
     /// Excludes inactive samples and those already with pending remake requests.
+    /// Also applies model/line filters, if applicable.
     /// </summary>
     /// <param name="query"><inheritdoc/></param>
     /// <returns>The <paramref name="query"/>, with filters applied.</returns>
     protected override IQueryable<Sample> ApplyFilters(IQueryable<Sample> query)
-        => query.Where(s => s.IsActive && !this.pendingRemakeIds.Contains(s.SampleId));
+    {
+        query = query.Where(s => s.IsActive && !this.pendingRemakeIds.Contains(s.SampleId));
+
+        if (this.ModelFilter.Value != null && this.ModelFilter.IsActive)
+        {
+            query = query.Where(x => x.Model.Contains(this.ModelFilter.Value));
+        }
+
+        if (this.LineFilter.Value != null && this.LineFilter.IsActive)
+        {
+            query = query.Where(x => x.Line.Contains(this.LineFilter.Value));
+        }
+
+        return query;
+    }
 
     /// <summary>
     /// Verifies a sample ID and prompts for a remake if one is found.

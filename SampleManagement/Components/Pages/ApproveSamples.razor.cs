@@ -52,13 +52,27 @@ public partial class ApproveSamples : TableManager<Sample>
     }
 
     /// <summary>
-    /// Overrides refresh to filter out samples that already have an approver number.
-    /// This ensures the filter is applied after every refresh (sort, page change, etc).
+    /// Filters out already-approved samples (they are meaningless on the approval screen).
+    /// Also applies the model/line filters, if applicable.
     /// </summary>
     /// <param name="query">The query to which filters should be applied.</param>
     /// <returns>A Task representing that <paramref name="query"/> is now filtered.</returns>
     protected override IQueryable<Sample> ApplyFilters(IQueryable<Sample> query)
-        => query.Where(s => s.ApproverNum == null);
+    {
+        query = query.Where(s => s.ApproverNum == null);
+
+        if (this.ModelFilter.Value != null && this.ModelFilter.IsActive)
+        {
+            query = query.Where(x => x.Model.Contains(this.ModelFilter.Value));
+        }
+
+        if (this.LineFilter.Value != null && this.LineFilter.IsActive)
+        {
+            query = query.Where(x => x.Line.Contains(this.LineFilter.Value));
+        }
+
+        return query;
+    }
 
     private void HandleApprove(Sample sample)
     {

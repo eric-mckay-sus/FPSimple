@@ -62,11 +62,26 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
 
     /// <summary>
     /// Filters out all already approved remake requests.
+    /// Also applies model/line filters, if applicable.
     /// </summary>
     /// <param name="query"><inheritdoc/></param>
     /// <returns>The <paramref name="query"/>, with filters applied.</returns>
     protected override IQueryable<RemakeRequestText> ApplyFilters(IQueryable<RemakeRequestText> query)
-        => query.Where(r => r.IsActive);
+    {
+        query = query.Where(r => r.IsActive);
+
+        if (this.ModelFilter.Value != null && this.ModelFilter.IsActive)
+        {
+            query = query.Where(x => x.Model.Contains(this.ModelFilter.Value));
+        }
+
+        if (this.LineFilter.Value != null && this.LineFilter.IsActive)
+        {
+            query = query.Where(x => x.Line.Contains(this.LineFilter.Value));
+        }
+
+        return query;
+    }
 
     private async Task PreloadSampleAsync(int sampleId)
     {

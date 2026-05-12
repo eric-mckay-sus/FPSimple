@@ -67,6 +67,16 @@ public class TableManager<T> : ComponentBase
     public int TotalPages => this.PageSize > 0 ? (int)Math.Ceiling((double)this.TotalCount / this.PageSize) : 1;
 
     /// <summary>
+    /// Gets or sets the optional model filter.
+    /// </summary>
+    public Filter<string> ModelFilter { get; set; } = new ("Model", null);
+
+    /// <summary>
+    /// Gets or sets the optional line name filter.
+    /// </summary>
+    public Filter<string> LineFilter { get; set; } = new ("Line",  null);
+
+    /// <summary>
     /// Gets the list of sorts to be applied to the query.
     /// </summary>
     protected List<Sort> SortList { get; } = [];
@@ -102,10 +112,7 @@ public class TableManager<T> : ComponentBase
         }
 
         this.IsLoading = true;
-
-        // Tell Blazor to render the loading spinner, then give it a second (to avoid a misleading 'No data' message, even briefly)
-        this.StateHasChanged();
-        await Task.Yield();
+        await this.InvokeAsync(this.StateHasChanged); // Show the loading spinner
 
         try
         {
@@ -123,6 +130,7 @@ public class TableManager<T> : ComponentBase
         finally
         {
             this.IsLoading = false;
+            await this.InvokeAsync(this.StateHasChanged); // Necessary to bookend previous InvokeAsync (otherwise it appears to load perpetually)
         }
     }
 
@@ -243,7 +251,8 @@ public class TableManager<T> : ComponentBase
     protected override async Task OnInitializedAsync() => await this.RefreshData();
 
     /// <summary>
-    /// Applies custom filters to the query. Override in derived classes to add filtering logic.
+    /// Hook for children to apply filtering logic.
+    /// Recommend applying model/line filters stored here using specific information about <typeparamref name="T"/>.
     /// </summary>
     /// <param name="query">The query to which filters should be appended.</param>
     /// <returns>An IQueryable object with filters applied.</returns>
@@ -288,6 +297,19 @@ public class TableManager<T> : ComponentBase
         }
 
         return query;
+    }
+
+    /// <summary>
+    /// Clears filters and reloads the table.
+    /// </summary>
+    /// <returns>A Task representing that the filters have been cleared.</returns>
+    protected async Task ClearAllFilters()
+    {
+        this.ModelFilter.Reset();
+        this.LineFilter.Reset();
+
+        await this.RefreshData();
+        this.StateHasChanged();
     }
 
     /// <summary>

@@ -55,6 +55,26 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     }
 
     /// <summary>
+    /// Applies model/line filters, if applicable.
+    /// </summary>
+    /// <param name="query"><inheritdoc/></param>
+    /// <returns>The query, with model/line filters applied.</returns>
+    protected override IQueryable<ModelLine> ApplyFilters(IQueryable<ModelLine> query)
+    {
+        if (this.ModelFilter.Value != null && this.ModelFilter.IsActive)
+        {
+            query = query.Where(x => x.Model.Contains(this.ModelFilter.Value));
+        }
+
+        if (this.LineFilter.Value != null && this.LineFilter.IsActive)
+        {
+            query = query.Where(x => x.Line.Contains(this.LineFilter.Value));
+        }
+
+        return query;
+    }
+
+    /// <summary>
     /// Executes the the actual upload after validation is complete by staging the selected file, then passing its path to the uploader.
     /// </summary>
     /// <returns>A Task representing whether the upload completion status.</returns>
