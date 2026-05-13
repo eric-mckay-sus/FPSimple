@@ -17,6 +17,11 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     private string? filePath;
 
     /// <summary>
+    /// Gets the message to show when <see cref="TableManager{T}.DataView"/> is empty.
+    /// </summary>
+    public override string EmptyMessage => "No model mappings matching these filters.";
+
+    /// <summary>
     /// When this page loads, wire the input provider's confirmation event to auto-open an alert (with flag).
     /// Also, set the output's OnNotify event to update the progress bar.
     /// </summary>
@@ -50,9 +55,28 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
             this.InvokeAsync(this.StateHasChanged);
         };
 
-        this.CurrentSortColumn = "ShortDescription";
-        this.SortDir = "ascending";
+        this.SortList.Add(new ("Model", SortDir.Asc));
         await base.OnInitializedAsync();
+    }
+
+    /// <summary>
+    /// Applies model/line filters, if applicable.
+    /// </summary>
+    /// <param name="query"><inheritdoc/></param>
+    /// <returns>The query, with model/line filters applied.</returns>
+    protected override IQueryable<ModelLine> ApplyFilters(IQueryable<ModelLine> query)
+    {
+        if (this.ModelFilter.Value != null && this.ModelFilter.IsActive)
+        {
+            query = query.Where(x => x.Model.Contains(this.ModelFilter.Value));
+        }
+
+        if (this.LineFilter.Value != null && this.LineFilter.IsActive)
+        {
+            query = query.Where(x => x.Line.Contains(this.LineFilter.Value));
+        }
+
+        return query;
     }
 
     /// <summary>

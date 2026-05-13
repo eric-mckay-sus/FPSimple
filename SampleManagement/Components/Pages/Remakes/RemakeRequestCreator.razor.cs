@@ -44,6 +44,11 @@ public partial class RemakeRequestCreator : TableManager<Sample>
     private string? errorMessage;
 
     /// <summary>
+    /// Gets the message to display when <see cref="TableManager{T}.DataView"/> is empty.
+    /// </summary>
+    public override string EmptyMessage => "No samples matching these filters available for remake request.";
+
+    /// <summary>
     /// <inheritdoc/>
     /// </summary>
     /// <param name="keepPage">Whether to keep the page value (or reset it to 1).</param>
@@ -64,8 +69,7 @@ public partial class RemakeRequestCreator : TableManager<Sample>
     /// <returns>A Task representing that the page has loaded.</returns>
     protected override async Task OnInitializedAsync()
     {
-        this.CurrentSortColumn = "CreationDate";
-        this.SortDir = "descending";
+        this.SortList.Add(new ("CreationDate", SortDir.Desc));
 
         using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
         this.availableReasons = await context.RemakeReasons.OrderBy(r => r.ReasonId).ToListAsync();
@@ -81,11 +85,26 @@ public partial class RemakeRequestCreator : TableManager<Sample>
 
     /// <summary>
     /// Excludes inactive samples and those already with pending remake requests.
+    /// Also applies model/line filters, if applicable.
     /// </summary>
     /// <param name="query"><inheritdoc/></param>
     /// <returns>The <paramref name="query"/>, with filters applied.</returns>
     protected override IQueryable<Sample> ApplyFilters(IQueryable<Sample> query)
-        => query.Where(s => s.IsActive && !this.pendingRemakeIds.Contains(s.SampleId));
+    {
+        query = query.Where(s => s.IsActive && !this.pendingRemakeIds.Contains(s.SampleId));
+
+        if (this.ModelFilter.Value != null && this.ModelFilter.IsActive)
+        {
+            query = query.Where(x => x.Model.Contains(this.ModelFilter.Value));
+        }
+
+        if (this.LineFilter.Value != null && this.LineFilter.IsActive)
+        {
+            query = query.Where(x => x.Line.Contains(this.LineFilter.Value));
+        }
+
+        return query;
+    }
 
     /// <summary>
     /// Verifies a sample ID and prompts for a remake if one is found.

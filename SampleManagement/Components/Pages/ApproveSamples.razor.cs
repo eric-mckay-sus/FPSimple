@@ -28,6 +28,11 @@ public partial class ApproveSamples : TableManager<Sample>
     public AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
 
     /// <summary>
+    /// Gets the message to display when <see cref="TableManager{T}.DataView"/> is empty.
+    /// </summary>
+    public override string EmptyMessage => "No samples pending approval matching these filters";
+
+    /// <summary>
     /// Gets or sets the dialog to show upon pressing the 'deny' button for a row.
     /// </summary>
     private protected DeleteDialog DeleteDialog { get; set; } = default!;
@@ -38,8 +43,7 @@ public partial class ApproveSamples : TableManager<Sample>
     /// <returns>A Task representing that the page has loaded.</returns>
     protected override async Task OnInitializedAsync()
     {
-        this.CurrentSortColumn = "CreationDate";
-        this.SortDir = "descending";
+        this.SortList.Add(new ("CreationDate", SortDir.Desc));
 
         // Resolve once — auth state is cached in the identity service, so we can assume it is stable for this session
         AuthenticationState authState = await this.AuthStateProvider.GetAuthenticationStateAsync();
@@ -53,13 +57,27 @@ public partial class ApproveSamples : TableManager<Sample>
     }
 
     /// <summary>
-    /// Overrides refresh to filter out samples that already have an approver number.
-    /// This ensures the filter is applied after every refresh (sort, page change, etc).
+    /// Filters out already-approved samples (they are meaningless on the approval screen).
+    /// Also applies the model/line filters, if applicable.
     /// </summary>
     /// <param name="query">The query to which filters should be applied.</param>
     /// <returns>A Task representing that <paramref name="query"/> is now filtered.</returns>
     protected override IQueryable<Sample> ApplyFilters(IQueryable<Sample> query)
-        => query.Where(s => s.ApproverNum == null);
+    {
+        query = query.Where(s => s.ApproverNum == null);
+
+        if (this.ModelFilter.Value != null && this.ModelFilter.IsActive)
+        {
+            query = query.Where(x => x.Model.Contains(this.ModelFilter.Value));
+        }
+
+        if (this.LineFilter.Value != null && this.LineFilter.IsActive)
+        {
+            query = query.Where(x => x.Line.Contains(this.LineFilter.Value));
+        }
+
+        return query;
+    }
 
     private void HandleApprove(Sample sample)
     {

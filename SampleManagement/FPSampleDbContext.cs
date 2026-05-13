@@ -113,7 +113,7 @@ public class FoolproofEntry
 /// <summary>
 /// Represents a model line mapping record in the database.
 /// </summary>
-[PrimaryKey(nameof(IcsNum), nameof(WorkCenterCode))]
+[PrimaryKey(nameof(IcsNum), nameof(Line))]
 public class ModelLine
 {
     /// <summary>
@@ -126,7 +126,7 @@ public class ModelLine
     /// Gets or sets the short description for this model line.
     /// </summary>
     [Column("shortDesc")]
-    public required string ShortDescription { get; set; }
+    public required string Model { get; set; }
 
     /// <summary>
     /// Gets or sets the production cell code for this model line.
@@ -138,7 +138,7 @@ public class ModelLine
     /// Gets or sets the work center code for this model line.
     /// </summary>
     [Column("workCenterCode")]
-    public required string WorkCenterCode { get; set; }
+    public required string Line { get; set; }
 
     /// <summary>
     /// Gets or sets the full description for this model line.
@@ -433,13 +433,13 @@ public class RemakeRequestText
     /// Gets or sets the model name of the sample to be remade.
     /// </summary>
     [Column("model")]
-    public string? Model { get; set; }
+    public required string Model { get; set; }
 
     /// <summary>
     /// Gets or sets the line name of the sample to be remade.
     /// </summary>
     [Column("workCenterCode")]
-    public string? Line { get; set; }
+    public required string Line { get; set; }
 
     /// <summary>
     /// Gets or sets the dummy sample number of the sample to be remade.
@@ -451,13 +451,13 @@ public class RemakeRequestText
     /// Gets or sets the name of the associate requesting the remake.
     /// </summary>
     [Column("associateName")]
-    public string? RequesterName { get; set; }
+    public required string RequesterName { get; set; }
 
     /// <summary>
     /// Gets or sets the remake request reason text.
     /// </summary>
     [Column("reasonText")]
-    public string? ReasonText { get; set; }
+    public required string ReasonText { get; set; }
 
     /// <summary>
     /// Gets or sets the time the sample remake was requested.

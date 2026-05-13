@@ -30,6 +30,11 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
     public AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
 
     /// <summary>
+    /// Gets the message to display when <see cref="TableManager{T}.DataView"/> is empty.
+    /// </summary>
+    public override string EmptyMessage => "No remakes pending approval matching these filters.";
+
+    /// <summary>
     /// Gets or sets the dialog to show upon pressing the 'deny' button for a row.
     /// </summary>
     private protected DeleteDialog DeleteDialog { get; set; } = default!;
@@ -40,8 +45,7 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
     /// <returns>A Task representing that the page has loaded.</returns>
     protected override async Task OnInitializedAsync()
     {
-        this.CurrentSortColumn = "RequestTime";
-        this.SortDir = "descending";
+        this.SortList.Add(new ("RequestTime", SortDir.Desc));
         AuthenticationState authState = await this.AuthStateProvider.GetAuthenticationStateAsync();
 
         // Could check the auth role here, but that's done page-side
@@ -63,11 +67,26 @@ public partial class RemakeRequestApprover : TableManager<RemakeRequestText>
 
     /// <summary>
     /// Filters out all already approved remake requests.
+    /// Also applies model/line filters, if applicable.
     /// </summary>
     /// <param name="query"><inheritdoc/></param>
     /// <returns>The <paramref name="query"/>, with filters applied.</returns>
     protected override IQueryable<RemakeRequestText> ApplyFilters(IQueryable<RemakeRequestText> query)
-        => query.Where(r => r.IsActive);
+    {
+        query = query.Where(r => r.IsActive);
+
+        if (this.ModelFilter.Value != null && this.ModelFilter.IsActive)
+        {
+            query = query.Where(x => x.Model.Contains(this.ModelFilter.Value));
+        }
+
+        if (this.LineFilter.Value != null && this.LineFilter.IsActive)
+        {
+            query = query.Where(x => x.Line.Contains(this.LineFilter.Value));
+        }
+
+        return query;
+    }
 
     private async Task PreloadSampleAsync(int sampleId)
     {

@@ -2,11 +2,17 @@
 
 <UniversalTable
     Items="Base.DataView"
+    IsLoading="Base.IsLoading"
+    EmptyMessage="@Base.EmptyMessage"
     CurrentPage="Base.CurrentPage"
     TotalPages="Base.TotalPages"
     TotalCount="Base.TotalCount"
     PageSize="Base.PageSize"
     OnPageChange="Base.ChangePage"
+    ModelFilter="Base.ModelFilter"
+    LineFilter="Base.LineFilter"
+    OnFilterChange="() => Base.RefreshData()"
+    ClearFilters="Base.ClearAllFilters"
     OnSort="Base.ToggleSort"
     GetSortIcon="Base.GetSortIcon"
     OnPageSizeChange="Base.AlterPageSize"
