@@ -19,6 +19,7 @@
                     <option value="500" selected="@(PageSize == 500)">500</option>
                 </select>
             </div>
+            <Button Color="ButtonColor.Secondary" Outline="true" @onclick="ClearFilters">Clear Filters</Button>
         </div>
         <nav>
             <ul class="pagination mt-3">
@@ -57,28 +58,37 @@ else if (Items != null && Items.Any())
     <div class="table-responsive-wrapper">
         <table class="table res-table table-striped text-nowrap">
             <thead>
-                <tr class="filter-row bg-light">
+                <tr class="filter-row bg-light" style="border: none;">
                     @foreach (var prop in GetVisibleProperties())
                     {
                         <td>
                             @if (prop.Name == "Model" && ModelFilter != null)
                                 {
-                                    <input class="form-control form-control-sm mt-1"
-                                        id="model-filter"
-                                        placeholder="Filter..."
-                                        value="@ModelFilter.Value"
-                                        @onclick:stopPropagation
-                                        @oninput="e => _ = HandleFilterInput(ModelFilter, e.Value?.ToString())" />
+                                    <div class="centered-container">
+                                        <input class="form-control form-control-sm mt-1"
+                                            style="width: 10rem;"
+                                            id="model-filter"
+                                            placeholder="Filter model..."
+                                            value="@ModelFilter.Value"
+                                            autocomplete="off"
+                                            @onclick:stopPropagation
+                                            @oninput="e => _ = HandleFilterInput(ModelFilter, e.Value?.ToString())" />
+                                    </div>
                                 }
 
                                 @if (prop.Name == "Line" && LineFilter != null)
                                 {
-                                    <input class="form-control form-control-sm mt-1"
-                                        id="line-filter"
-                                        placeholder="Filter..."
-                                        value="@LineFilter.Value"
-                                        @onclick:stopPropagation
-                                        @oninput="e => _ = HandleFilterInput(LineFilter, e.Value?.ToString())" />
+                                    <div class="centered-container">
+                                        <input class="form-control form-control-sm mt-1"
+                                            style="width: 10rem;"
+                                            id="line-filter"
+                                            placeholder="Filter line..."
+                                            value="@LineFilter.Value"
+                                            autocomplete="off"
+                                            @onclick:stopPropagation
+                                            @oninput="e => _ = HandleFilterInput(LineFilter, e.Value?.ToString())" />
+                                    </div>
+
                                 }
                         </td>
                     }

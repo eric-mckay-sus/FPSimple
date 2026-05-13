@@ -55,7 +55,7 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
             this.InvokeAsync(this.StateHasChanged);
         };
 
-        this.SortList.Add(new ("ShortDescription", SortDir.Asc));
+        this.SortList.Add(new ("Model", SortDir.Asc));
         await base.OnInitializedAsync();
     }
 

@@ -240,11 +240,29 @@ public class TableManager<T> : ComponentBase
     }
 
     /// <summary>
+    /// Clears filters and reloads the table.
+    /// </summary>
+    /// <returns>A Task representing that the filters have been cleared.</returns>
+    public async Task ClearAllFilters()
+    {
+        if (this.ModelFilter.IsActive || this.LineFilter.IsActive)
+        {
+            this.ModelFilter.Reset();
+            this.LineFilter.Reset();
+
+            await this.RefreshData();
+            this.StateHasChanged();
+        }
+    }
+
+    /// <summary>
     /// Clears the in-memory table state.
     /// </summary>
-    public void ClearData()
+    /// <returns>A Task representing that the table has been totally reset.</returns>
+    public async Task ClearData()
     {
         this.DataView.Clear();
+        await this.ClearAllFilters();
         this.TotalCount = 0;
         this.CurrentPage = 1;
     }
@@ -302,19 +320,6 @@ public class TableManager<T> : ComponentBase
         }
 
         return query;
-    }
-
-    /// <summary>
-    /// Clears filters and reloads the table.
-    /// </summary>
-    /// <returns>A Task representing that the filters have been cleared.</returns>
-    protected async Task ClearAllFilters()
-    {
-        this.ModelFilter.Reset();
-        this.LineFilter.Reset();
-
-        await this.RefreshData();
-        this.StateHasChanged();
     }
 
     /// <summary>

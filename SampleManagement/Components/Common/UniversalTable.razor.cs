@@ -101,6 +101,12 @@ public partial class UniversalTable<T>
     [Parameter]
     public EventCallback OnFilterChange { get; set; }
 
+    /// <summary>
+    /// Gets or sets the action to perform when the 'Clear Filters' button is pressed.
+    /// </summary>
+    [Parameter]
+    public EventCallback ClearFilters { get; set; }
+
     // Sorting
 
     /// <summary>
