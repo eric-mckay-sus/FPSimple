@@ -34,15 +34,15 @@ public class UserIdentityService(IDbContextFactory<FPSampleDbContext> dbFactory,
 
     /// <summary>
     /// Gets the authentication state, which can be one of three things:
-    /// Unauthenticated (associate number not in DB, HTTP 401 on attempted admin page access).
-    /// Unauthorized (associate number in DB without admin privileges, HTTP 403 on attempted admin page access).
-    /// Authorized (associate number in DB with admin privileges, successful navigation on admin page access).
+    /// Unauthenticated (associate number not in DB, HTTP 401 on attempted approver page access).
+    /// Unauthorized (associate number in DB without approver privileges, HTTP 403 on attempted approver page access).
+    /// Authorized (associate number in DB with approver privileges, successful navigation on approver page access).
     /// </summary>
     /// <returns>The authentication state of the current user.</returns>
     public async Task<ClaimsPrincipal> GetUserPrincipalAsync()
     {
         // Get the username from the system (e.g. SUSU1057, SUSD5938)
-        string associateString = ENV.UserName;
+        string? associateString = ENV.UserName;
         string cacheKey = $"UserPrincipal_{associateString}";
 
         // If there's an identity stored in the cache, use that
@@ -51,26 +51,11 @@ public class UserIdentityService(IDbContextFactory<FPSampleDbContext> dbFactory,
             return cachedPrincipal;
         }
 
-        // Check domain and name, verify that they match for SUS.
-        // This is not trivial to trick using the environment variables.
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            string[] domainAndUser = System.Security.Principal.WindowsIdentity.GetCurrent().Name.Split('\\');
-            string domain = domainAndUser[0];
-            associateString = domainAndUser[1];
-            if (!(domain.Equals("STANLEYUS") && associateString.StartsWith("SUS")))
-            {
-                return new (new ClaimsIdentity());
-            }
-        }
+        associateString = ReadUsername(associateString);
 
-        // But fall back to environment variables.
-        else
+        if (associateString == null)
         {
-            if (!(ENV.UserDomainName.Equals("STANLEYUS") && associateString.StartsWith("SUS")))
-            {
-                return new (new ClaimsIdentity());
-            }
+            return new (new ClaimsIdentity());
         }
 
         // Trim the first four characters (SUSU, but also works for SUSD if an IT person wanted to peek).
@@ -78,37 +63,41 @@ public class UserIdentityService(IDbContextFactory<FPSampleDbContext> dbFactory,
 
         ClaimsPrincipal principal;
 
-        // Extract associate number from remaining (hopefully all numeric) characters
+        // Extract associate number from remaining (hopefully all numeric) characters. Note this works for any length of associate number that fits in an int (guaranteed up to 9 digits)
         if (int.TryParse(associateString, out int associateNum))
         {
+            // Lookup associate from DB
             using FPSampleDbContext context = await this.dbFactory.CreateDbContextAsync();
             Associate? associate = await context.Set<Associate>()
                 .FirstOrDefaultAsync(a => a.AssociateNum == associateNum);
 
+            // The associate was found in the DB
             if (associate != null)
             {
-                // Create identifier, adding admin role if applicable
-                var claims = new List<Claim>
-                {
+                // Create identifier, adding approver role if applicable
+                List<Claim> claims =
+                [
                     new (ClaimTypes.Name, associate.Name ?? string.Empty),
                     new ("AssociateNum", associateNum.ToString()),
-                };
+                ];
 
                 if (associate.IsApprover)
                 {
-                    claims.Add(new Claim(ClaimTypes.Role, "Admin"));
+                    claims.Add(new Claim(ClaimTypes.Role, "Approver"));
                 }
 
                 ClaimsIdentity identity = new (claims, "AutoAuth");
                 principal = new (identity);
             }
+
+            // If the associate wasn't found in the DB, return anonymous
             else
             {
                 principal = new (new ClaimsIdentity());
             }
-
-            // If int.TryParse failed (prefix strip didn't get something that looked like associate number) or an associate with the parsed number wasn't found in the DB, return anonymous.
         }
+
+        // If int.TryParse failed (prefix strip didn't get something that looked like associate number), return anonymous.
         else
         {
             principal = new (new ClaimsIdentity());
@@ -116,5 +105,37 @@ public class UserIdentityService(IDbContextFactory<FPSampleDbContext> dbFactory,
 
         this.cache.Set(cacheKey, principal, TimeSpan.FromMinutes(10));
         return principal;
+    }
+
+    /// <summary>
+    /// Validates a user based on the domain and username. If it's not a match for Stanley, return null.
+    /// </summary>
+    /// <param name="associateString">The username to validate.</param>
+    /// <returns>A string with the username (adapted to Windows, if applicable) if it matches Stanley credentials. Otherwise, null.</returns>
+    private static string? ReadUsername(string associateString)
+    {
+        // Check domain and name, verify that they match for SUS (ignore environment variable)
+        // This is not trivial to trick using the environment variables
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            string[] domainAndUser = System.Security.Principal.WindowsIdentity.GetCurrent().Name.Split('\\');
+            string domain = domainAndUser[0];
+            associateString = domainAndUser[1];
+            if (!(domain.Equals("STANLEYUS") && associateString.StartsWith("SUS")))
+            {
+                return null;
+            }
+        }
+
+        // Fall back to environment variables if not on Windows
+        else
+        {
+            if (!(ENV.UserDomainName.Equals("STANLEYUS") && associateString.StartsWith("SUS")))
+            {
+                return null;
+            }
+        }
+
+        return associateString;
     }
 }

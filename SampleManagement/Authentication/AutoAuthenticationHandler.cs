@@ -17,10 +17,10 @@ using Microsoft.Extensions.Options;
 /// <param name="options">An AuthenticationSchemeOptions object representing how the handler should be configured.</param>
 /// <param name="identityService">The implementation of identity service (injected from Program.cs).</param>
 public class AutoAuthenticationHandler(
-    IOptionsMonitor<AutoAuthenticationOptions> options,
+    IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    IUserIdentityService identityService) : AuthenticationHandler<AutoAuthenticationOptions>(options, logger, encoder)
+    IUserIdentityService identityService) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     /// <summary>
     /// Authenticates the current user.
@@ -41,13 +41,6 @@ public class AutoAuthenticationHandler(
 }
 
 /// <summary>
-/// Empty options object or use in AutoAuthenticationHandler.
-/// </summary>
-public class AutoAuthenticationOptions : AuthenticationSchemeOptions
-{
-}
-
-/// <summary>
 /// Contains extension methods for AutoAuthenticationHandler.
 /// </summary>
 public static class AutoAuthenticationExtensions
@@ -59,7 +52,7 @@ public static class AutoAuthenticationExtensions
     /// <returns><paramref name="builder"/>, with auto-authentication enabled.</returns>
     public static AuthenticationBuilder AddAutoAuthentication(this AuthenticationBuilder builder)
     {
-        return builder.AddScheme<AutoAuthenticationOptions, AutoAuthenticationHandler>(
-            "AutoAuth", options => { });
+        return builder.AddScheme<AuthenticationSchemeOptions, AutoAuthenticationHandler>(
+            "AutoAuth", _ => { });
     }
 }

@@ -28,13 +28,13 @@ public static class Program
         builder.Services.AddDbContextFactory<FPSampleDbContext>(options =>
             options.UseSqlServer(Config.GetConnectionString()));
 
-        builder.Services.AddScoped<IUserIdentityService, UserIdentityService>();
-        builder.Services.AddMemoryCache();
-
         builder.Services.AddTransient<BlazorInputProvider>();
         builder.Services.AddTransient<IInputProvider>(sp => sp.GetRequiredService<BlazorInputProvider>());
         builder.Services.AddTransient<BlazorReporter>();
         builder.Services.AddTransient<IOutputProvider>(sp => sp.GetRequiredService<BlazorReporter>());
+
+        builder.Services.AddScoped<IUserIdentityService, UserIdentityService>();
+        builder.Services.AddMemoryCache();
 
         // Authentication & Authorization
         builder.Services.AddAuthentication("AutoAuth")
