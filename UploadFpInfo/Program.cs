@@ -6,16 +6,15 @@ namespace UploadFpInfo;
 
 using System.Data;
 using Microsoft.Data.SqlClient;
-using NPOI.HSSF.UserModel; // for older XLS files
 using NPOI.SS.UserModel; // for generic spreadsheet manipulation
-using NPOI.XSSF.UserModel; // for newer XLSX files
 using static Path;
 
-using static FPUploadUtilities; // static allows its methods to be accessed later without qualification
+using static NpoiEtlUtilities;
+using static DbUploadUtilities;
 using InterProcessIO;
 
 /// <summary>
-/// Consolidates the parse/upload process for foolproof dummy sample sheets
+/// Details the high-level parse/upload process for foolproof dummy sample sheets
 /// The model to line database must be populated for insertion validation to succeed.
 /// </summary>
 public class FPSheetUploader
@@ -96,18 +95,17 @@ public class FPSheetUploader
             path = filename;
         }
 
-        bool containsDuplicate = false;
-        bool containsMiscError = false;
+        ParseResult parseResult = default;
 
         try
         {
             if (Directory.Exists(path))
             {
-                (containsDuplicate, containsMiscError) = await this.RunBatch(path);
+                parseResult = await this.RunBatch(path);
             }
             else if (File.Exists(path) && IsExcelFile(path))
             {
-                (containsDuplicate, containsMiscError) = await this.ProcessFile(path);
+                parseResult = await this.ProcessFile(path);
             }
 
             // should never reach here unless the file is somehow deleted during the upload
@@ -120,21 +118,28 @@ public class FPSheetUploader
             // Declare the upload as complete when the batch/file finishes
             await this.output.ReportProgress(ProgressEvent.UploadComplete);
 
-            if (containsDuplicate)
+            if (parseResult.HasDuplicate)
             {
-                string[] duplicateNames = this.output.BatchResults.Where(fr => fr.hadDuplicates).Select(fr => GetFileName(fr.file)).ToArray();
+                string[] duplicateNames = this.output.BatchResults.Where(fr => fr.parseResult.HasDuplicate).Select(fr => GetFileName(fr.file)).ToArray();
                 string report = string.Join("\n\t", duplicateNames);
                 await this.Report($"The following files contain duplicate entries:\n\t{report}\nIf you wish to update, do so manually. Otherwise, no action is required.", ReportLevel.WARNING);
             }
 
-            if (containsMiscError)
+            if (parseResult.HasFormatError)
             {
-                string[] miscNames = this.output.BatchResults.Where(fr => fr.hadErrors).Select(fr => GetFileName(fr.file)).ToArray();
+                string[] duplicateNames = this.output.BatchResults.Where(fr => fr.parseResult.HasDuplicate).Select(fr => GetFileName(fr.file)).ToArray();
+                string report = string.Join("\n\t", duplicateNames);
+                await this.Report($"The following files could not be parsed due to formatting:\n\t{report}\nPlease verify that they are foolproof data sheets and correct the format.", ReportLevel.ERROR);
+            }
+
+            if (parseResult.HasMiscError)
+            {
+                string[] miscNames = this.output.BatchResults.Where(fr => fr.parseResult.HasMiscError).Select(fr => GetFileName(fr.file)).ToArray();
                 string report = string.Join("\n\t", miscNames);
                 await this.Report($"The following files contain miscellaneous errors:\n{report}\nPlease investigate them to verify why they could not upload.", ReportLevel.ERROR);
             }
 
-            if (containsDuplicate || containsMiscError)
+            if (parseResult.HasDuplicate || parseResult.HasMiscError)
             {
                 return UploadResult.CompleteWithErrors;
             }
@@ -156,85 +161,10 @@ public class FPSheetUploader
     }
 
     /// <summary>
-    /// Verifies that a particular model exists in the model to line (MTL) database.
-    /// </summary>
-    /// <param name="toValidate">The model name to validate.</param>
-    /// <returns>Whether <paramref name="toValidate"/> exists in the MTL database.</returns>
-    private static async Task<bool> ValidateModel(string? toValidate)
-    {
-        if (string.IsNullOrWhiteSpace(toValidate))
-        {
-            return false;
-        }
-
-        using SqlConnection conn = new (Config.GetConnectionString());
-        await conn.OpenAsync();
-
-        string sql = @"
-            SELECT COUNT(*) FROM dbo.ModelToLine
-                   WHERE shortDesc = @model";
-
-        using SqlCommand cmd = new (sql, conn);
-        cmd.Parameters.AddWithValue("@model", toValidate);
-
-        int count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
-
-        return count > 0;
-    }
-
-    private static async Task ExecuteBulkCopy(DataTable dt, SqlConnection conn)
-    {
-        using SqlBulkCopy bulkCopy = new (conn);
-        bulkCopy.DestinationTableName = "dbo.FoolproofInfo";
-
-        // Map DataTable columns to DB columns
-        bulkCopy.ColumnMappings.Add("model", "model");
-        bulkCopy.ColumnMappings.Add("revision", "revision");
-        bulkCopy.ColumnMappings.Add("issueDate", "issueDate");
-        bulkCopy.ColumnMappings.Add("issuer", "issuer");
-        bulkCopy.ColumnMappings.Add("failureMode", "failureMode");
-        bulkCopy.ColumnMappings.Add("rank", "rank");
-        bulkCopy.ColumnMappings.Add("location", "location");
-        bulkCopy.ColumnMappings.Add("dummySampleNum", "dummySampleNum");
-
-        await bulkCopy.WriteToServerAsync(dt);
-    }
-
-    /// <summary>
-    /// Asynchronously writes the input DataRow's contents to the FP info table.
-    /// Only use this method after attempting (and failing) a bulk copy.
-    /// </summary>
-    /// <param name="dr">The DataRow whose contents will be written to the server.</param>
-    /// <param name="conn">The open SQL connection to be used in the SqlCommand.</param>
-    /// <returns>A Task representing the completion (or failure) of the insertion.</returns>
-    private static async Task WriteRowToDatabase(DataRow dr, SqlConnection conn)
-    {
-        string sql = @"
-            INSERT INTO dbo.FoolproofInfo
-            (model, revision, issueDate, issuer, failureMode, rank, location, dummySampleNum)
-            VALUES
-            (@model, @revision, @issueDate, @issuer, @failureMode, @rank, @location, @dummySampleNum)";
-
-        using SqlCommand cmd = new (sql, conn);
-
-        // Mapping parameters from the DataRow
-        cmd.Parameters.Add("@model", SqlDbType.VarChar, 32).Value = dr["model"];
-        cmd.Parameters.Add("@revision", SqlDbType.TinyInt).Value = dr["revision"];
-        cmd.Parameters.Add("@issueDate", SqlDbType.Date).Value = dr["issueDate"];
-        cmd.Parameters.Add("@issuer", SqlDbType.VarChar, 32).Value = dr["issuer"];
-        cmd.Parameters.Add("@failureMode", SqlDbType.VarChar, 100).Value = dr["failureMode"];
-        cmd.Parameters.Add("@rank", SqlDbType.Char, 1).Value = dr["rank"];
-        cmd.Parameters.Add("@location", SqlDbType.VarChar, 100).Value = dr["location"];
-        cmd.Parameters.Add("@dummySampleNum", SqlDbType.SmallInt).Value = dr["dummySampleNum"];
-
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    /// <summary>
     /// Processes a batch of FP info files.
     /// </summary>
     /// <returns>An tuple representing whether the batch contains a file that 1) contains PK collision(s) and 2) has a miscellaneous error.</returns>
-    private async Task<(bool, bool)> RunBatch(string directoryPath)
+    private async Task<ParseResult> RunBatch(string directoryPath)
     {
         DirectoryInfo inputDir = new (directoryPath);
 
@@ -246,89 +176,50 @@ public class FPSheetUploader
         if (files.Length == 0)
         {
             await this.Report("No Excel files found.", ReportLevel.ERROR);
-            return (false, false);
+            return default;
         }
 
         await this.Report($"Found {files.Length} files. Starting upload to database...\n");
 
-        bool currentContainsDuplicate = false;
-        bool currentContainsMisc = false;
-        bool batchContainsDuplicate = false;
-        bool batchContainsMisc = false;
+        ParseResult fileResult = default;
+        ParseResult batchResult = default;
         foreach (FileInfo file in files)
         {
             try
             {
-                (currentContainsDuplicate, currentContainsMisc) = await this.ProcessFile(file.FullName);
+                fileResult = await this.ProcessFile(file.FullName);
 
-                // Assign batch & misc duplicate flag to current if it isn't already set (OR is short-circuiting so this is fast)
-                batchContainsDuplicate = batchContainsDuplicate || currentContainsDuplicate;
-                batchContainsMisc = batchContainsMisc || currentContainsMisc;
+                // Use fileResult as a bitmask to apply new errors to the batch result (see overloaded OR operator in ParseResult)
+                batchResult |= fileResult;
             }
             catch (FormatException f)
             {
                 await this.Report($"\t[INVALID FORMAT] {f.Message}\n", ReportLevel.ERROR);
-                batchContainsMisc = true;
+                batchResult |= new ParseResult(hasFormatError: true);
             }
             catch (Exception ex)
             {
                 await this.Report($"\t[SKIP] {ex.Message}\n", ReportLevel.ERROR);
-                batchContainsMisc = true;
+                batchResult |= new ParseResult(hasMiscError: true);
             }
         }
 
-        return (batchContainsDuplicate, batchContainsMisc);
+        return batchResult;
     }
 
     /// <summary>
     /// Processes one FP info file.
     /// </summary>
-    /// <param name="excelPath">The path to the file to be processed.</param>
-    /// <returns>A Task with a duplicate flag and a miscellaneous error flag.</returns>
-    /// <exception cref="Exception">When the file does not have a sheet at the specified index.</exception>
-    private async Task<(bool, bool)> ProcessFile(string excelPath)
+    /// <param name="path">The path to the file to be processed.</param>
+    /// <returns>A Task containing a <see cref="ParseResult"/> describing this file's success/failure.</returns>
+    private async Task<ParseResult> ProcessFile(string path)
     {
-        await this.output.SetCurrentFile(GetFileName(excelPath));
+        await this.output.SetCurrentFile(GetFileName(path));
 
-        // Load Excel file, grab the sheet, then close the Excel file
-        ISheet sheet;
-        using (FileStream fs = new (excelPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-        using (IWorkbook workbook = excelPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ? new XSSFWorkbook(fs) : new HSSFWorkbook(fs))
-        {
-            sheet = workbook.GetSheetAt(Config.SheetIndex)
-                    ?? throw new Exception($"Sheet index {Config.SheetIndex} not found in {GetFileName(excelPath)}.\n");
-        }
-
-        // Extract and validate metadata (header row)
-        (byte revision, DateTime issueDate, string? issuer) = ParseMetadata(sheet);
-
-        if (issueDate == DateTime.MinValue)
-        {
-            throw new FormatException($"Could not find a valid issue date in the header area of {GetFileName(excelPath)}.");
-        }
-        else if (revision == byte.MaxValue)
-        {
-            throw new FormatException($"Could not find a valid revision number in the header area of {GetFileName(excelPath)}.");
-        }
-        else if (string.IsNullOrWhiteSpace(issuer))
-        {
-            throw new FormatException($"Could not find a valid issuer name in the header area of {GetFileName(excelPath)}.");
-        }
-
-        // Get column indices associated with column names and verify all necessary columns are present
-        Dictionary<string, int> colMap = MapHeaderIndices(sheet);
-        foreach (string header in Config.DataHeaderNames)
-        {
-            if (colMap[header] == -1)
-            {
-                throw new FormatException($"Missing required column '{header}' in {GetFileName(excelPath)}.");
-            }
-        }
+        (ISheet sheet, SheetWideData metadata, Dictionary<string, int> colMap) = await LoadAndValidateWorkbook(path);
 
         // Initialize flags for error detection and intention to repeat
-        bool hasDuplicate = false;
-        bool hasMiscError = false;
-        bool alreadyUploaded = false;
+        ParseResult parseResult = default;
         bool applyAnotherFilter = false;
         bool isNewFile = true;
 
@@ -347,76 +238,37 @@ public class FPSheetUploader
                 await this.output.ReportProgress(ProgressEvent.FileRepeated);
             }
 
-            (string model, bool isFiltering, int targetColIndex) = await this.CollectUserInput(GetFileName(excelPath), isNewFile);
+            (string model, bool isFiltering, int targetColIndex) = await this.CollectUserInput(GetFileName(path), isNewFile);
             if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
             {
                 await this.output.ReportProgress(ProgressEvent.FileSkipped);
-                return (hasDuplicate, hasMiscError);
+                return parseResult;
             }
             else
             {
                 isNewFile = true; // For the next iteration
             }
 
+            metadata.Model = model;
+
             // Initialize DataTable for rows
-            DataTable dt = BuildDataTableFromSheet(sheet, model, revision, issueDate, issuer, colMap, isFiltering, targetColIndex);
+            DataTable dt = BuildDataTableFromSheet(sheet, metadata, colMap, isFiltering, targetColIndex);
 
             if (dt.Rows.Count > 0)
             {
-                try
-                {
-                    // Attempt a bulk copy
-                    await ExecuteBulkCopy(dt, conn);
-                }
-                catch (Exception)
-                {
-                    // If bulk copy fails, fall back to row-by-row to find the culprit
-                    await this.Report("\t[BULK FAILED] One or more entries in this file could not be added to the database. Switching insertion modes for error reporting...\n", ReportLevel.WARNING);
-                    Stack<Report> rowSkipStack = new (); // Use a stack to ensure the skips are printed in the order they appear in the file
+                parseResult = await this.AttemptUpload(dt, conn);
+            }
 
-                    // Iterate in reverse to guarantee indices don't move on deletion
-                    for (int i = dt.Rows.Count - 1; i >= 0; i--)
-                    {
-                        DataRow dr = dt.Rows[i];
-                        try
-                        {
-                            await WriteRowToDatabase(dr, conn);
-                        }
-                        catch (SqlException rowEx) when (rowEx.Number == 2627 || rowEx.Number == 2601)
-                        {
-                            rowSkipStack.Push(new ($"\t[ROW SKIP] Duplicate: Rev {revision}, Location {dr["location"]} Dummy #{dr["dummySampleNum"]}\n", ReportLevel.WARNING));
-                            hasDuplicate = true;
-                            dt.Rows.RemoveAt(i); // remove the problem row
-                        }
-                        catch (Exception rowEx)
-                        {
-                            rowSkipStack.Push(new ($"\t[ROW SKIP] Error: {rowEx.Message}\n", ReportLevel.ERROR));
-                            hasMiscError = true;
-                            dt.Rows.RemoveAt(i); // remove the problem row
-                        }
-                    }
-
-                    if (dt.Rows.Count > 0)
-                    {
-                        while (rowSkipStack.Count > 0)
-                        {
-                            Report current = rowSkipStack.Pop();
-                            await this.Report(current.message, current.level);
-                        }
-                    }
-
-                    // If every row was duplicate, assume the file was already uploaded for this model.
-                    else
-                    {
-                        await this.Report($"This portion of {GetFileName(excelPath)} has already been uploaded under {model}, so it has been skipped.");
-                        alreadyUploaded = true;
-                    }
-                }
+            // If every row was duplicate, assume the file was already uploaded for this model.
+            if (dt.Rows.Count == 0 && parseResult.HasDuplicate)
+            {
+                await this.Report($"This portion of {GetFileName(path)} has already been uploaded under {metadata.Model}, so it has been skipped.");
+                parseResult |= new ParseResult { alreadyUploaded = true };
             }
 
             // Report parse success/failure
             await this.output.ShowPreview(dt);
-            this.output.BatchResults.Add(new (excelPath, model, alreadyUploaded, hasDuplicate, hasMiscError, dt.Rows.Count)); // Add a summary row by model and file
+            this.output.BatchResults.Add(new (path, model, parseResult, dt.Rows.Count)); // Add a summary row by model and file
 
             if (isFiltering)
             {
@@ -433,7 +285,61 @@ public class FPSheetUploader
         // Files are marked as complete once the user stops collecting data from them
         await this.output.ReportProgress(ProgressEvent.FileCompleted);
 
-        return (hasDuplicate, hasMiscError);
+        return parseResult;
+    }
+
+    /// <summary>
+    /// Attempts to upload all contents of <paramref name="dt"/> over <paramref name="conn"/>.
+    /// First attempts a standard SqlBulkCopy for speed, but if that fails, falls back to row-by row for granularity.
+    /// </summary>
+    /// <param name="dt">The DataTable to upload.</param>
+    /// <param name="conn">The SqlConnection used to connect to the database.</param>
+    /// <returns>A Task containing the <see cref="ParseResult"/> signifying the success/failure of the upload.</returns>
+    private async Task<ParseResult> AttemptUpload(DataTable dt, SqlConnection conn)
+    {
+        try
+        {
+            // Attempt a bulk copy
+            await ExecuteBulkCopy(dt, conn);
+            return default;
+        }
+        catch (Exception)
+        {
+            // If bulk copy fails, fall back to row-by-row to find the culprit
+            await this.Report("\t[BULK FAILED] One or more entries in this file could not be added to the database. Switching insertion modes for error reporting...\n", ReportLevel.WARNING);
+            Stack<Report> rowSkipStack = new (); // Use a stack to ensure the skips are printed in the order they appear in the file
+            ParseResult parseResult = default;
+
+            // Iterate in reverse to guarantee indices don't move on deletion
+            for (int i = dt.Rows.Count - 1; i >= 0; i--)
+            {
+                DataRow dr = dt.Rows[i];
+
+                (ParseResult rowResult, Report? skipReport) = await TryWriteRow(dr, conn);
+                parseResult |= rowResult;
+
+                if (skipReport != null)
+                {
+                    rowSkipStack.Push(skipReport);
+                    dt.Rows.RemoveAt(i); // remove the problem row
+                }
+            }
+
+            if (dt.Rows.Count > 0)
+            {
+                while (rowSkipStack.Count > 0)
+                {
+                    Report current = rowSkipStack.Pop();
+                    await this.Report(current.message, current.level);
+                }
+            }
+            else
+            {
+                parseResult |= new ParseResult(alreadyUploaded: true);
+            }
+
+            return parseResult;
+        }
     }
 
     /// <summary>
@@ -449,19 +355,21 @@ public class FPSheetUploader
         bool isFiltering = false;
         int targetColIndex = -1;
 
-        // This outer loop controls redirects to the model prompt (i.e. bad model name or 'R' in response to the column prompt)
+        // Prompt for a model/column filter until satisfied (manual break)
         while (true)
         {
             await this.Report($"{(isNewModel ? "[NEW]" : "[REPEAT]")} {filename}\n", ReportLevel.IMPORTANT);
             Report modelPrompt = new ($"\tPlease enter the C. Core model name for the contents to be imported (or type 'SKIP' to proceed to the next file):");
             model = (await this.input.GetInputAsync(modelPrompt, error)).Trim();
 
+            // If the user says to skip, return immediately without prompting for any more info
             if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
             {
                 await this.Report($"\tSkipping file: {filename}\n", ReportLevel.WARNING);
                 return (model, isFiltering, targetColIndex);
             }
 
+            // Verify that the model actually exists (this is why the MTL database is prerequisite for this program)
             if (!await ValidateModel(model))
             {
                 await this.Report($"\t{model} is not in the model to line database. Please try again.\n", ReportLevel.WARNING);
@@ -470,38 +378,65 @@ public class FPSheetUploader
                 continue;
             }
 
-            error = null; // reset error message here to avoid overwriting either prompt
+            // After the model has been obtained, get an optional column filter
+            (bool isFiltering, int targetColIndex)? filterResult = await this.CollectColumnFilter(model);
 
-            // This inner loop controls redirects to the column prompt (i.e. bad column )
-            while (true)
+            // If the returned value is null, that does NOT mean they wish to skip the column filter. Instead, they wish to return to model selection
+            if (filterResult is null)
             {
-                string colPrompt = $"\t[{model}] Enter Excel column name BM-CJ ('R' to change model, or ENTER for no filter):";
-                string filterColumnName = (await this.input.GetInputAsync(new (colPrompt), error)).Trim();
-
-                if (filterColumnName.Equals("R", StringComparison.OrdinalIgnoreCase))
-                { // Signal that this is a repeat, then repeat by breaking the inner loop, redirecting to outer loop
-                    isNewModel = false;
-                    error = null;
-                    break;
-                }
-
-                targetColIndex = ColumnIndex(filterColumnName);
-
-                if (string.IsNullOrEmpty(filterColumnName))
-                {
-                    isFiltering = false;
-                    return (model, isFiltering, -1);
-                }
-
-                if (targetColIndex >= 64 && targetColIndex <= 87)
-                {
-                    isFiltering = true;
-                    return (model, isFiltering, targetColIndex);
-                }
-
-                await this.Report($"\t{filterColumnName} is out of range. Please try again.\n", ReportLevel.WARNING);
-                error = $"{filterColumnName} is out of range. Please try again.";
+                isNewModel = false;
+                error = null;
+                continue;
             }
+
+            // If we make it here without manually triggering a repeat, the input is valid
+            return (model, isFiltering, targetColIndex);
+        }
+    }
+
+    /// <summary>
+    /// Collects the optional column filter from the user.
+    /// </summary>
+    /// <param name="model">The model for which to collect the column filter.</param>
+    /// <returns>A Task holding the updated state of the target column index and whether the filter is desired.</returns>
+    private async Task<(bool isFiltering, int targetColIndex)?> CollectColumnFilter(string model)
+    {
+        string? error = null;
+        bool isFiltering = false;
+        int targetColIndex = -1;
+
+        // This inner loop controls redirects to the column prompt (i.e. bad column )
+        while (true)
+        {
+            string colPrompt = $"\t[{model}] Enter Excel column name BM-CJ ('R' to change model, or ENTER for no filter):";
+            string filterColumnName = (await this.input.GetInputAsync(new (colPrompt), error)).Trim();
+
+            // If the user signals to re-enter model name, return null as a sentinel
+            if (filterColumnName.Equals("R", StringComparison.OrdinalIgnoreCase))
+            {
+                return default;
+            }
+
+            // If the user entered some version of nothing, they don't want a column filter
+            if (string.IsNullOrEmpty(filterColumnName))
+            {
+                isFiltering = false;
+                return (isFiltering, -1);
+            }
+
+            // Otherwise, treat it as a valid column name
+            targetColIndex = ColumnIndex(filterColumnName);
+
+            // Make sure it falls in the designated range
+            if (targetColIndex >= 64 && targetColIndex <= 87)
+            {
+                isFiltering = true;
+                return (isFiltering, targetColIndex);
+            }
+
+            // If it didn't fall in the designated range, notify the user and try again
+            await this.Report($"\t{filterColumnName} is out of range. Please try again.\n", ReportLevel.WARNING);
+            error = $"{filterColumnName} is out of range. Please try again.";
         }
     }
 

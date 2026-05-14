@@ -4,18 +4,96 @@
 
 namespace UploadFpInfo;
 
+using NPOI.HSSF.UserModel; // for older XLS files
 using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel; // for newer XLSX files
 using System.Globalization;
 using System.Data;
 using System.Text.RegularExpressions;
 
+using static Path;
+
 using InterProcessIO;
+
+/// <summary>
+/// Documents the sheet-wide data: model, revision, issuer, and issue date
+/// </summary>
+public record SheetWideData
+{
+    /// <summary>
+    /// Gets or sets the model name for this sheet.
+    /// </summary>
+    public string? Model { get; set; }
+
+    /// <summary>
+    /// Gets or sets the revision number for this sheet.
+    /// </summary>
+    public byte Revision { get; set; }
+
+    /// <summary>
+    /// Gets or sets the issue date of this sheet.
+    /// </summary>
+    public DateTime IssueDate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the name of the associate who issued this sheet.
+    /// </summary>
+    public string? Issuer { get; set; }
+}
 
 /// <summary>
 /// Contains utility methods for pre-FP upload parsing.
 /// </summary>
-public static partial class FPUploadUtilities
+public static partial class NpoiEtlUtilities
 {
+    /// <summary>
+    /// Loads and validates the Excel workbook at <paramref name="path"/>.
+    /// Exceptions must be handled by the caller.
+    /// </summary>
+    /// <param name="path">The path to the Excel workbook.</param>
+    /// <returns>The sheet object, its metadata, and column map.</returns>
+    /// <exception cref="FileNotFoundException">Technically abusing this class, but thrown when there is no sheet at the specified index (highly improbable).</exception>
+    /// <exception cref="FormatException">Thrown when the header is missing necessary metadata.</exception>
+    public static async Task<(ISheet, SheetWideData, Dictionary<string, int>)> LoadAndValidateWorkbook(string path)
+    {
+        // Load Excel file, grab the sheet, then close the Excel file
+        ISheet sheet;
+        using (FileStream fs = new (path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (IWorkbook workbook = path.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ? new XSSFWorkbook(fs) : new HSSFWorkbook(fs))
+        {
+            sheet = workbook.GetSheetAt(Config.SheetIndex)
+                    ?? throw new FileNotFoundException($"Sheet index {Config.SheetIndex} not found in {GetFileName(path)}.\n");
+        }
+
+        // Extract and validate metadata (header row)
+        SheetWideData metadata = ParseMetadata(sheet);
+
+        if (metadata.IssueDate == DateTime.MinValue)
+        {
+            throw new FormatException($"Could not find a valid issue date in the header area of {GetFileName(path)}.");
+        }
+        else if (metadata.Revision == byte.MaxValue)
+        {
+            throw new FormatException($"Could not find a valid revision number in the header area of {GetFileName(path)}.");
+        }
+        else if (string.IsNullOrWhiteSpace(metadata.Issuer))
+        {
+            throw new FormatException($"Could not find a valid issuer name in the header area of {GetFileName(path)}.");
+        }
+
+        // Get column indices associated with column names and verify all necessary columns are present
+        Dictionary<string, int> colMap = MapHeaderIndices(sheet);
+        foreach (string header in Config.DataHeaderNames)
+        {
+            if (colMap[header] == -1)
+            {
+                throw new FormatException($"Missing required column '{header}' in {GetFileName(path)}.");
+            }
+        }
+
+        return (sheet, metadata, colMap);
+    }
+
     /// <summary>
     /// Dynamically maps header names to indices (reads all entries in header row).
     /// </summary>
@@ -118,15 +196,12 @@ public static partial class FPUploadUtilities
     /// Factored-out method to build and fill a datatable with the necessary data.
     /// </summary>
     /// <param name="sheet">The sheet from which data should be extracted.</param>
-    /// <param name="model">The model name to insert.</param>
-    /// <param name="revision">The revision number (not iteration number) to insert.</param>
-    /// <param name="issueDate">The issue date to insert.</param>
-    /// <param name="issuer">The issuer name to insert.</param>
+    /// <param name="metadata">The <see cref="SheetWideData"/> object containing model, revision, issuer, and issue date.</param>
     /// <param name="colMap">The mapping of Excel column names to indices.</param>
     /// <param name="isFiltering">Whether a filter was applied for the first run on this sheet.</param>
     /// <param name="targetColIndex">The target column index of the filter (only rows with data in this column will be inserted).</param>
     /// <returns>The complete DataTable ready for upload.</returns>
-    public static DataTable BuildDataTableFromSheet(ISheet sheet, string model, byte revision, DateTime issueDate, string? issuer, Dictionary<string, int> colMap, bool isFiltering, int targetColIndex)
+    public static DataTable BuildDataTableFromSheet(ISheet sheet, SheetWideData metadata, Dictionary<string, int> colMap, bool isFiltering, int targetColIndex)
     {
         DataTable dt = CreateFoolproofDataTable();
         int rowIndex = Config.DataStartRow - 1;
@@ -150,10 +225,10 @@ public static partial class FPUploadUtilities
             if (dummySampleNum != null && passesFilter)
             {
                 DataRow dr = dt.NewRow();
-                dr["model"] = model;
-                dr["revision"] = revision;
-                dr["issueDate"] = issueDate;
-                dr["issuer"] = (object?)issuer ?? DBNull.Value;
+                dr["model"] = metadata.Model;
+                dr["revision"] = metadata.Revision;
+                dr["issueDate"] = metadata.IssueDate;
+                dr["issuer"] = (object?)metadata.Issuer ?? DBNull.Value;
                 dr["failureMode"] = GetCellText(row, colMap["PROCESS FAILURE MODE"]).Replace("\n", string.Empty);
                 dr["rank"] = GetCellText(row, colMap["RANK"]);
                 dr["location"] = GetCellText(row, colMap["LOCATION"]);
@@ -256,7 +331,7 @@ public static partial class FPUploadUtilities
     /// </summary>
     /// <param name="sheet">The sheet to be parsed.</param>
     /// <returns>A tuple containing the desired metadata.</returns>
-    public static (byte Revision, DateTime IssueDate, string Issuer) ParseMetadata(ISheet sheet)
+    public static SheetWideData ParseMetadata(ISheet sheet)
     {
         IRow dataRow = sheet.GetRow(Config.GlobalStartRow - 1);
         int[] metadataIndices = Config.GlobalColumns.Select(ColumnIndex).ToArray();
@@ -273,12 +348,13 @@ public static partial class FPUploadUtilities
                                   .Replace("nd", string.Empty, StringComparison.OrdinalIgnoreCase)
                                   .Replace("rd", string.Empty, StringComparison.OrdinalIgnoreCase);
 
-        if (!DateTime.TryParse(cleanDate, out DateTime issueDate))
+        if (!DateTime.TryParse(cleanDate, CultureInfo.CurrentCulture, out DateTime issueDate))
         {
             issueDate = DateTime.MinValue;
         }
 
-        return (revision, issueDate, issuer);
+        // Encapsulate sheet-wide data (model is obtained separately)
+        return new SheetWideData { Model = null, Revision = revision, IssueDate = issueDate, Issuer = issuer };
     }
 
     // Generating the regular expressions at compile-time expedites the match
