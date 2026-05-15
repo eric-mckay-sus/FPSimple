@@ -227,7 +227,7 @@
                 <tbody>
                     @foreach (FileResult file in GetBatchSummary())
                     {
-                        <tr class="@(file.parseResult.HasMiscError || file.parseResult.HasFormatError ? "table-danger-light" : file.parseResult.HasDuplicate ? "table-warning-light" : "")">
+                        <tr class="@GetBadgeStyle(file)">
                             <td class="fw-bold">@Path.GetFileName(file.file)</td>
                             <td class="fw-bold">@file.model</td>
                             <td class="text-center">

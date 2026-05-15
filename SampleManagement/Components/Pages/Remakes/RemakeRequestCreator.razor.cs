@@ -133,33 +133,32 @@ public partial class RemakeRequestCreator : TableManager<Sample>
         }
         else
         {
-            if (validationError == null)
+            // Recreate the query
+            IQueryable<Sample> query = this.ApplyFilters(context.Samples.AsQueryable());
+            IQueryable<Sample> sortedQuery = this.ApplySorting(query);
+
+            // Fetch IDs to find the index
+            int[] idList = await sortedQuery.Select(s => s.SampleId).ToArrayAsync();
+            int index = Array.IndexOf(idList, sampleId);
+
+            if (index != -1)
             {
-                // Recreate the query
-                IQueryable<Sample> query = this.ApplyFilters(context.Samples.AsQueryable());
-                IQueryable<Sample> sortedQuery = this.ApplySorting(query);
-
-                // Fetch IDs to find the index
-                int[] idList = await sortedQuery.Select(s => s.SampleId).ToArrayAsync();
-                int index = Array.IndexOf(idList, sampleId);
-
-                if (index != -1)
+                // Calculate and jump to the correct page
+                int targetPage = (index / this.PageSize) + 1;
+                if (this.CurrentPage != targetPage)
                 {
-                    // Calculate and jump to the correct page
-                    int targetPage = (index / this.PageSize) + 1;
-                    if (this.CurrentPage != targetPage)
-                    {
-                        await this.ChangePage(targetPage);
-                    }
-
-                    this.HandleRemake(sample);
+                    await this.ChangePage(targetPage);
                 }
+
+                this.HandleRemake(sample);
             }
-            else
-            {
-                this.Navigation.NavigateTo(this.Navigation.GetUriWithQueryParameter("sampleId", (string?)null));
-                this.ToastService.Notify(new (ToastType.Warning, validationError));
-            }
+        }
+
+        // If there was a navigation error, report it and amend the URL
+        if (validationError != null)
+        {
+            this.Navigation.NavigateTo(this.Navigation.GetUriWithQueryParameter("sampleId", (string?)null));
+            this.ToastService.Notify(new (ToastType.Warning, validationError));
         }
     }
 

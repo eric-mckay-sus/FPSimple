@@ -13,6 +13,7 @@ using Microsoft.JSInterop;
 /// </summary>
 /// <typeparam name="T">The class defining one record in the table.</typeparam>
 public partial class UniversalTable<T>
+    where T : class
 {
     /// <summary>
     /// A cache of the properties of T so it's not invoked for each header, excluding those marked NotDisplayed.
@@ -226,19 +227,19 @@ public partial class UniversalTable<T>
 
     private string GetRowClass(T item)
     {
-        if (item == null)
+        if (item.Equals(default))
         {
             return string.Empty;
         }
 
         // Priority 1: the row being targeted
-        if (Equals(item, this.Target))
+        if (item.Equals(this.Target))
         {
             return this.TargetStyle ?? "table-primary";
         }
 
         // Priority 2: the row the user clicked to "watch"
-        if (Equals(item, this.attentionItem))
+        if (item.Equals(this.attentionItem))
         {
             return "table-active cursor-pointer";
         }
@@ -260,6 +261,32 @@ public partial class UniversalTable<T>
         }
 
         return this.cachedProps.Where(p => p.GetCustomAttribute<VerboseAttribute>() == null).ToArray();
+    }
+
+    /// <summary>
+    /// Gets the CSS class for the property.
+    /// </summary>
+    /// <param name="prop">The property to get the CSS class for.</param>
+    /// <returns>The CSS class for the property.</returns>
+    private string GetPropertyClass(PropertyInfo prop)
+    {
+        string className = $"col-{prop.Name}";
+
+        // If this property is verbose, only show it in expanded mode
+        if (prop.GetCustomAttribute<VerboseAttribute>() != null)
+        {
+            className += "transition-width";
+            if (this.isExpanded)
+            {
+                className += "verbose-visible";
+            }
+            else
+            {
+                className += "verbose-hidden";
+            }
+        }
+
+        return className;
     }
 
     /// <summary>
@@ -325,8 +352,12 @@ public partial class UniversalTable<T>
     {
         filter.Value = value; // Write immediately, no render yet
 
-        this.filterDebounce?.Cancel();
-        this.filterDebounce?.Dispose();
+        if (this.filterDebounce != null)
+        {
+            await this.filterDebounce.CancelAsync();
+            this.filterDebounce.Dispose();
+        }
+
         this.filterDebounce = new CancellationTokenSource();
         CancellationToken token = this.filterDebounce.Token;
 

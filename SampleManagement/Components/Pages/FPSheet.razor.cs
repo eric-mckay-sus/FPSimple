@@ -205,6 +205,31 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     private static partial Regex ParenthesesClipper();
 
     /// <summary>
+    /// Gets the CSS class for the badge based on the file result.
+    /// </summary>
+    /// <param name="file">The file result to get the badge style for.</param>
+    /// <returns>The CSS class for the badge.</returns>
+    private static string GetBadgeStyle(FileResult file)
+    {
+        if (file.parseResult.AlreadyUploaded)
+        {
+            return "table-warning-light";
+        }
+        else if (file.parseResult.HasFormatError)
+        {
+            return "table-danger-light";
+        }
+        else if (file.parseResult.HasMiscError)
+        {
+            return "table-danger-light";
+        }
+        else
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
     /// Converts the DataTable from the Reporter into a list of DTOs for the UniversalTable.
     /// </summary>
     /// <returns>An IEnumerable of FP rows from the preview DataTable.</returns>

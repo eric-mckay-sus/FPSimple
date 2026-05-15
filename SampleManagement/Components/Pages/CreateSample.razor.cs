@@ -141,7 +141,7 @@ public partial class CreateSample : TableManager<Sample>
     /// <returns>The <paramref name="query"/> where remake date is null.</returns>
     protected override IQueryable<Sample> ApplyFilters(IQueryable<Sample> query)
     {
-        query = query.Where(s => s.IsActive == true || s.ApproverNum == null);
+        query = query.Where(s => s.IsActive || s.ApproverNum == null);
 
         if (this.ModelFilter.Value != null && this.ModelFilter.IsActive)
         {
@@ -154,10 +154,6 @@ public partial class CreateSample : TableManager<Sample>
         }
 
         return query;
-    }
-
-    private static void DoNothing()
-    {
     }
 
     /// <summary>
@@ -187,8 +183,9 @@ public partial class CreateSample : TableManager<Sample>
             this.availableModels = this.allMappings
                 .Where(x => x.Line == this.formData.WorkCenterCode)
                 .Select(x => x.Model)
+                .Distinct()
                 .OrderBy(x => x)
-                .Distinct().ToList();
+                .ToList();
         }
 
         // Otherwise, clear the line filter
@@ -203,8 +200,9 @@ public partial class CreateSample : TableManager<Sample>
             this.availableLines = this.allMappings
                 .Where(x => x.Model == this.formData.Model)
                 .Select(x => x.Line)
+                .Distinct()
                 .OrderBy(x => x)
-                .Distinct().ToList();
+                .ToList();
         }
 
         // Otherwise, clear the model filter
@@ -219,8 +217,9 @@ public partial class CreateSample : TableManager<Sample>
             this.availableSampleNums = await context.FoolproofInfo
                 .Where(f => f.Model == this.formData.Model)
                 .Select(f => f.DummySampleNum)
+                .Distinct()
                 .OrderBy(x => x)
-                .Distinct().ToListAsync();
+                .ToListAsync();
         }
         else
         {
@@ -325,7 +324,7 @@ public partial class CreateSample : TableManager<Sample>
         this.isPrinting = true;
         this.printCts = new ();
         this.totalFromQueue = this.selectedForPrint.Count;
-        HashSet<int> failedIds = [];
+        HashSet<Sample> failedSamples = []; // Takes up some more space, but cuts a future query
 
         using TcpClient conn = new ();
         try
@@ -349,14 +348,14 @@ public partial class CreateSample : TableManager<Sample>
                 else
                 {
                     this.ToastService.Notify(new (ToastType.Danger, $"Sample {sample.SampleId}: {statusReport.message}"));
-                    failedIds.Add(sample.SampleId);
+                    failedSamples.Add(sample);
                 }
 
                 await Task.Delay(PrintLabel.Config.InterPrintDelayMs, this.printCts.Token); // Wait a second between prints to ensure each toast is visible and that printer isn't overloaded
             }
 
             // By setting selectedForPrint to only the failed IDs, the user can see easily which samples to investigate
-            this.selectedForPrint = this.selectedForPrint.Where(x => failedIds.Contains(x.SampleId)).ToList();
+            this.selectedForPrint = failedSamples.ToList();
 
             // If no prints failed, inform the user and exit print mode
             if (this.selectedForPrint.Count == 0)
@@ -373,15 +372,15 @@ public partial class CreateSample : TableManager<Sample>
             else
             {
                 this.ToastService.Notify(new (ToastType.Warning,
-                                            $"Printed {this.printed} of {this.printed + failedIds.Count} samples (unsuccessful prints still selected)",
-                                            $"Failed to print samples with IDs {string.Join(", ", failedIds)}"));
+                                            $"Printed {this.printed} of {this.printed + failedSamples.Count} samples (unsuccessful prints still selected)",
+                                            $"Failed to print samples: {string.Join(", ", failedSamples.Select(s => s.SampleId))}"));
             }
         }
 
         // Go here when the user cancels a batch print
         catch (OperationCanceledException)
         {
-            this.ToastService.Notify(new (ToastType.Warning, $"Print batch cancelled after {this.printed + failedIds.Count} of {this.totalFromQueue} labels."));
+            this.ToastService.Notify(new (ToastType.Warning, $"Print batch cancelled after {this.printed + failedSamples.Count} of {this.totalFromQueue} labels."));
         }
 
         // Have to handle Socket & IO exceptions here because this component owns the TCP connection
