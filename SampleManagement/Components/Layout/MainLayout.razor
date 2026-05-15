@@ -2,8 +2,8 @@
 @inject ToastService toastService
 
 <div class="page">
-    <div class="sidebar">
-        <NavMenu />
+    <div class="sidebar @(sidebarExpanded ? "sidebar-expanded" : "")">
+        <NavMenu OnToggle="OnSidebarToggle" />
     </div>
 
     <main>
@@ -20,3 +20,12 @@
 </div>
 
 <Toasts Placement="ToastsPlacement.BottomRight" AutoHide="true" Delay="4000" />
+
+@code {
+    private bool sidebarExpanded = false;
+
+    private void OnSidebarToggle(bool isExpanded)
+    {
+        sidebarExpanded = isExpanded;
+    }
+}
