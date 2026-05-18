@@ -1,15 +1,15 @@
-// <copyright file="Config.cs" company="Stanley Electric US Co. Inc.">
+// <copyright file="ConfigPrint.cs" company="Stanley Electric US Co. Inc.">
 // Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
 // </copyright>
 
-namespace PrintLabel;
+namespace InterProcessIO;
 
 using StringBuilder = Microsoft.Data.SqlClient.SqlConnectionStringBuilder;
 
 /// <summary>
-/// A container for the data that is constant in PrintLabel (but could change).
+/// A container for the data that is constant in the print utility (but could change).
 /// </summary>
-public static class Config
+public static partial class Config
 {
     /// <summary>
     /// Gets the printer's DPI. MUST be 203 or 304 for a valid print.

@@ -9,7 +9,7 @@ using System.Net.Sockets;
 using InterProcessIO;
 
 /// <summary>
-/// A DTO for the upload/print information required by <see cref="ZebraUploadPrint.ExecuteAsync(ZplCommand, bool)"/>.
+/// A DTO for the upload/print information required by <see cref="ZebraPrintFlow.ExecuteAsync(ZplCommand, bool)"/>.
 /// </summary>
 public record ZplCommand
 {
@@ -25,9 +25,9 @@ public record ZplCommand
 }
 
 /// <summary>
-/// Connects to a Zebra printer over TCP to upload a template or print a sample by ID.
+/// Defines the flow of retrieving and transmitting (over TCP) print information (template file, DPI, and sample ID) to a Zebra printer.
 /// </summary>
-public partial class ZebraUploadPrint
+public partial class ZebraPrintFlow
 {
     /// <summary>
     /// Determines where user input comes from.
@@ -40,33 +40,33 @@ public partial class ZebraUploadPrint
     private readonly IOutputProvider output;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ZebraUploadPrint"/> class.
+    /// Initializes a new instance of the <see cref="ZebraPrintFlow"/> class.
     /// By default, uses the console for input and output.
     /// </summary>
-    public ZebraUploadPrint()
+    public ZebraPrintFlow()
     {
         this.input = new ConsoleInputProvider();
         this.output = new ConsoleReporter();
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ZebraUploadPrint"/> class, using the specified input and output providers.
+    /// Initializes a new instance of the <see cref="ZebraPrintFlow"/> class, using the specified input and output providers.
     /// </summary>
     /// <param name="inputProvider">The instance of IInputProvider to be used to get input regarding FP sheet details.</param>
     /// <param name="outputProvider">The instance of IReportOutputProvider to be used for displaying program results.</param>
-    public ZebraUploadPrint(IInputProvider inputProvider, IOutputProvider outputProvider)
+    public ZebraPrintFlow(IInputProvider inputProvider, IOutputProvider outputProvider)
     {
         this.input = inputProvider;
         this.output = outputProvider;
     }
 
     /// <summary>
-    /// Application entry point. Instantiates a <see cref="ZebraUploadPrint"/> object and calls <see cref="PromptAndExecute"/> to escape the static.
+    /// Application entry point. Instantiates a <see cref="ZebraPrintFlow"/> object and calls <see cref="PromptAndExecute"/> to escape the static.
     /// </summary>
     /// <returns>A Task representing program completion.</returns>
     public static async Task Main()
     {
-        ZebraUploadPrint printObject = new ();
+        ZebraPrintFlow printObject = new ();
         await printObject.PromptAndExecute();
     }
 

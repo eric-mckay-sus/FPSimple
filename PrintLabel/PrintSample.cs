@@ -12,7 +12,7 @@ using System.Net.Sockets;
 /// <summary>
 /// Defines methods used to print a sample.
 /// </summary>
-public partial class ZebraUploadPrint
+public partial class ZebraPrintFlow
 {
     /// <summary>
     /// Prompts for and validates the information necessary for a print command (sample ID and print DPI).
