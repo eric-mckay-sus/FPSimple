@@ -70,6 +70,7 @@ public partial class RemakeRequestCreator : TableManager<Sample>
     protected override async Task OnInitializedAsync()
     {
         this.SortList.Add(new ("CreationDate", SortDir.Desc));
+        this.SortList.Add(new ("SampleId", SortDir.Desc));
 
         using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
         this.availableReasons = await context.RemakeReasons.OrderBy(r => r.ReasonId).ToListAsync();

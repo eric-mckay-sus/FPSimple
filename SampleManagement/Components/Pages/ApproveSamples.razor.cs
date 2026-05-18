@@ -44,6 +44,7 @@ public partial class ApproveSamples : TableManager<Sample>
     protected override async Task OnInitializedAsync()
     {
         this.SortList.Add(new ("CreationDate", SortDir.Desc));
+        this.SortList.Add(new ("SampleId", SortDir.Desc));
 
         // Resolve once — auth state is cached in the identity service, so we can assume it is stable for this session
         AuthenticationState authState = await this.AuthStateProvider.GetAuthenticationStateAsync();

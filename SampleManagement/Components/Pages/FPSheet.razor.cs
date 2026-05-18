@@ -148,6 +148,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         }
 
         this.SortList.Add(new ("IssueDate", SortDir.Desc));
+        this.SortList.Add(new ("Model", SortDir.Asc));
         await base.OnInitializedAsync();
     }
 

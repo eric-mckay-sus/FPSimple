@@ -74,11 +74,26 @@
         </div>
     </div>
 
-    <div class="expandable-wrapper @(!(isFormExpanded || printModeEngaged) ? "is-expanded" : "")">
+    <div class="expandable-wrapper @(!(isFormExpanded || printModeEngaged || isAwaitingPrint) ? "is-expanded" : "")">
         <div class="expandable-content centered-container">
             <button class="btn btn-success" @onclick="() => isFormExpanded=true">
                 <Icon Name="IconName.PencilSquare" /> Create New Sample
             </button>
+        </div>
+    </div>
+    <div class="expandable-wrapper @(isAwaitingPrint ? "is-expanded" : "")">
+        <div class="expandable-content centered-container">
+            <div class="form-card animate-fade-in text-center">
+                <p>Sample <strong>#@justCreatedSample?.DummySampleNum</strong> created for
+                <strong>@justCreatedSample?.Model</strong> on <strong>@justCreatedSample?.Line</strong>.</p>
+                <p class="text-muted">Print it now?</p>
+                <button class="btn btn-primary me-2" @onclick="HandlePrintJustCreated">
+                    <Icon Name="IconName.Printer" /> Yes, print
+                </button>
+                <button class="btn btn-outline-secondary" @onclick="DismissPrintPrompt">
+                    Not now
+                </button>
+            </div>
         </div>
     </div>
     <div class="expandable-wrapper @(printModeEngaged && !isPrinting ? "is-expanded" : "")">

@@ -3,6 +3,7 @@
 // </copyright>
 
 namespace SampleManagement.Components.Pages;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using ToastType = BlazorBootstrap.ToastType;
 
@@ -42,9 +43,12 @@ public partial class CreateSample : TableManager<Sample>
     /// </summary>
     private List<short> availableSampleNums = [];
 
+    /// <summary>
+    /// The last model name that was entered in the sample creation card.
+    /// </summary>
     private string lastModel = string.Empty;
 
-    // UI properties
+    // For printing
 
     /// <summary>
     /// The DPI to with which to print samples.
@@ -81,6 +85,18 @@ public partial class CreateSample : TableManager<Sample>
     /// Could swap out List for HashSet, but the benefit here is that execution order matches selection order.
     /// </summary>
     private List<Sample> selectedForPrint = [];
+
+    /// <summary>
+    /// Tracks whether the user is viewing the 'print new sample?' prompt.
+    /// </summary>
+    private bool isAwaitingPrint =  false;
+
+    /// <summary>
+    /// Stores the <see cref="Sample"/> object that was most recently created in this session, if applicable.
+    /// </summary>
+    private Sample? justCreatedSample;
+
+    // UI properties
 
     /// <summary>
     /// Error message about pending sample, if applicable.
@@ -137,6 +153,7 @@ public partial class CreateSample : TableManager<Sample>
     protected override async Task OnInitializedAsync()
     {
         this.SortList.Add(new ("CreationDate", SortDir.Desc));
+        this.SortList.Add(new ("SampleId", SortDir.Desc));
         await base.OnInitializedAsync();
     }
 
@@ -161,6 +178,28 @@ public partial class CreateSample : TableManager<Sample>
         }
 
         return query;
+    }
+
+    /// <summary>
+    /// Fires a SqlCommand to execute the sample creation stored procedure.
+    /// </summary>
+    /// <param name="context">The DB context where the SP lives.</param>
+    /// <param name="data">The data used in the sample creation SP.</param>
+    /// <returns>A Task-wrapped integer representing the ID of the new sample.</returns>
+    private static async Task<int> CreateSampleAndFetchId(FPSampleDbContext context, SampleFormData data)
+    {
+        await context.Database.OpenConnectionAsync();
+        using SqlCommand cmd = new (
+            "EXEC [dbo].[CreateSample] @model, @workCenterCode, @dummySampleNum, @creatorNum",
+            (SqlConnection)context.Database.GetDbConnection());
+
+        cmd.Parameters.AddWithValue("@model", data.Model);
+        cmd.Parameters.AddWithValue("@workCenterCode", data.WorkCenterCode);
+        cmd.Parameters.AddWithValue("@dummySampleNum", data.DummySampleNum);
+        cmd.Parameters.AddWithValue("@creatorNum", data.CreatorNum);
+
+        object? result = await cmd.ExecuteScalarAsync();
+        return Convert.ToInt32(result); // Must be an integer, as the SP selects SCOPE_IDENTITY()
     }
 
     /// <summary>
@@ -271,16 +310,15 @@ public partial class CreateSample : TableManager<Sample>
         {
             using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
 
-            // ExecuteSqlInterpolatedAsync internally wraps each parameter in an injection-safe DbParameter
-            await context.Database.ExecuteSqlInterpolatedAsync($@"
-            EXEC [dbo].[CreateSample]
-                @model = {this.formData.Model},
-                @workCenterCode = {this.formData.WorkCenterCode},
-                @dummySampleNum = {this.formData.DummySampleNum},
-                @creatorNum = {this.formData.CreatorNum}");
+            int newId = await CreateSampleAndFetchId(context, this.formData);
+
+            this.justCreatedSample = await context.Samples
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.SampleId == newId);
 
             this.formData = new (); // Reset form
             await this.RefreshData();
+            this.isAwaitingPrint = this.justCreatedSample != null;
             this.isFormExpanded = false; // Auto-collapse on success to show the table
             this.ToastService.Notify(new (ToastType.Success, "Sample created successfully!"));
         }
@@ -289,6 +327,23 @@ public partial class CreateSample : TableManager<Sample>
             this.errorMessage = $"Database Error: {ex.Message}";
             this.ToastService.Notify(new (ToastType.Danger, "Sample creation failed."));
         }
+    }
+
+    private async Task HandlePrintJustCreated()
+    {
+        this.isAwaitingPrint = false;
+        if (this.justCreatedSample != null)
+        {
+            await this.HandlePrint(this.justCreatedSample);
+        }
+
+        this.justCreatedSample = null;
+    }
+
+    private void DismissPrintPrompt()
+    {
+        this.isAwaitingPrint = false;
+        this.justCreatedSample = null;
     }
 
     /// <summary>
