@@ -14,14 +14,14 @@ using InterProcessIO;
 public record ZplCommand
 {
     /// <summary>
-    /// Gets or sets print mode's sample ID.
+    /// Gets or sets the ID of the sample to be printed.
     /// </summary>
-    public int? SampleId { get; set; } = null;
+    public int? SampleId { get; set; }
 
     /// <summary>
-    /// Gets or sets the path on this machine of the ZPL template to use.
+    /// Gets or sets the printer's DPI.
     /// </summary>
-    public string TemplatePath { get; set; } = Config.TemplatePath;
+    public int PrintDpi { get; set; } = Config.PrinterDpi;
 }
 
 /// <summary>
