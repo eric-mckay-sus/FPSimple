@@ -47,6 +47,11 @@ public partial class CreateSample : TableManager<Sample>
     // UI properties
 
     /// <summary>
+    /// The DPI to with which to print samples.
+    /// </summary>
+    private int printDpi = 203;
+
+    /// <summary>
     /// The number of samples successfully printed in the current batch.
     /// </summary>
     private int printed = 0;
@@ -296,7 +301,7 @@ public partial class CreateSample : TableManager<Sample>
         this.isPrinting = true;
         try
         {
-            ZplCommand cmd = new () { SampleId = sample.SampleId };
+            ZplCommand cmd = new () { SampleId = sample.SampleId, PrintDpi = this.printDpi };
             ZebraUploadPrint zupObject = new (this.InputProvider, this.Reporter);
             Report statusReport = await zupObject.ExecuteAsync(cmd);
             if (statusReport.level == ReportLevel.SUCCESS)
@@ -340,7 +345,7 @@ public partial class CreateSample : TableManager<Sample>
                 this.printCts.Token.ThrowIfCancellationRequested();
 
                 // Create a print request for each sample
-                ZplCommand cmd = new () { SampleId = sample.SampleId };
+                ZplCommand cmd = new () { SampleId = sample.SampleId, PrintDpi = this.printDpi };
                 ZebraUploadPrint zupObject = new (this.InputProvider, this.Reporter);
                 Report statusReport = await zupObject.ExecuteAsync(cmd, conn, leaveOpen: true);
                 if (statusReport.level == ReportLevel.SUCCESS)
