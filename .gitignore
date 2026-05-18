@@ -122,6 +122,7 @@ artifacts/
 *.pidb
 *.svclog
 *.scc
+*.csproj.lscache
 
 # Chutzpah Test files
 _Chutzpah*
@@ -259,5 +260,5 @@ FakesAssemblies/
 
 # Visual Studio 6 workspace options file
 *.opt
-.editorconfig
 /loadDbEnv.bat
+**/.sonarqube

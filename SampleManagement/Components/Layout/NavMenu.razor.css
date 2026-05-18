@@ -2,22 +2,26 @@ body {
     font-family: sans-serif, 'Helvetica Neue', Helvetica, Arial;
 }
 
-.navbar-toggler {
-    appearance: none;
-    cursor: pointer;
+.navbar-toggler-wrapper {
     width: 3.5rem;
     height: 2.5rem;
-    color: white;
-    position: absolute;
-    top: 0.5rem;
-    right: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.55%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") no-repeat center/1.75rem rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
 }
 
-    .navbar-toggler:checked {
+    /* Change wrapper background when toggler is expanded */
+    .navbar-toggler-wrapper.sidebar-expanded {
         background-color: rgba(255, 255, 255, 0.5);
     }
+
+.navbar-toggler {
+    width: 100%;
+    height: 100%;
+}
 
 .top-row {
     height: 3.5rem;
@@ -121,11 +125,13 @@ body {
     }
 
     .nav-item ::deep a.active {
-        background-color: rgba(255,255,255,0.37);
+        background-color: rgb(113, 118, 158);
+        background-color: rgba(255,255,255,0.4);
         color: white;
     }
 
     .nav-item ::deep .nav-link:hover {
+        background-color: rgb(75, 78, 115);
         background-color: rgba(255,255,255,0.2);
         color: white;
     }
@@ -142,27 +148,16 @@ body {
     flex-direction: column;
 }
 
-    /* Show the brand text when the parent sidebar is hovered */
-    .nav-scrollable:hover .header-brand {
+    /* Show the brand & text for all labels when the navbar is hovered or expanded */
+    .nav-scrollable.sidebar-expanded .header-brand,
+    .nav-scrollable.sidebar-expanded .nav-item label {
         opacity: 1;
     }
 
-    .nav-scrollable:hover .nav-item label {
-        opacity: 1;
+    /* On hover/expand, give the navbar more room */
+    .nav-scrollable.sidebar-expanded {
+        width: 250px;
     }
-
-    .nav-scrollable:hover {
-        width: 250px; /* Expanded width */
-    }
-
-::element(.sidebar:hover) .nav-item label,
-::element(.sidebar:hover) .header-brand {
-    opacity: 1;
-}
-
-.navbar-toggler:checked ~ .nav-scrollable {
-    display: block;
-}
 
 @media (min-width: 641px) {
     .navbar-toggler {
@@ -176,5 +171,17 @@ body {
         /* Allow sidebar to scroll for tall menus */
         height: calc(100vh - 3.5rem);
         overflow-y: auto;
+    }
+}
+
+/* Restrict hover effects to just the devices that can use them (cursor-required) */
+@media (hover: hover) {
+    .nav-scrollable:hover .header-brand,
+    .nav-scrollable:hover .nav-item label {
+        opacity: 1
+    }
+
+    .nav-scrollable:not(.sidebar-expanded):hover {
+        width: 250px;
     }
 }

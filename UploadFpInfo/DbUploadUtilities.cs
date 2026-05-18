@@ -1,0 +1,126 @@
+// <copyright file="DbUploadUtilities.cs" company="Stanley Electric US Co. Inc.">
+// Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
+// </copyright>
+
+namespace UploadFpInfo;
+
+using Microsoft.Data.SqlClient;
+using System.Data;
+
+using InterProcessIO;
+
+/// <summary>
+/// Contains methods useful for uploading foolproof data sheets to the foolproof info database.
+/// Independent of file reading.
+/// </summary>
+public static class DbUploadUtilities
+{
+    // These column names are used frequently enough to merit separate storage
+    private static readonly string RevisionColName = "revision";
+    private static readonly string LocationColName = "location";
+    private static readonly string DummySampleColName = "dummySampleNum";
+
+    /// <summary>
+    /// Verifies that a particular model exists in the model to line (MTL) database.
+    /// </summary>
+    /// <param name="toValidate">The model name to validate.</param>
+    /// <returns>Whether <paramref name="toValidate"/> exists in the MTL database.</returns>
+    public static async Task<bool> ValidateModel(string? toValidate)
+    {
+        if (string.IsNullOrWhiteSpace(toValidate))
+        {
+            return false;
+        }
+
+        using SqlConnection conn = new (Config.GetConnectionString());
+        await conn.OpenAsync();
+
+        string sql = @"
+            SELECT COUNT(*) FROM dbo.ModelToLine
+                   WHERE shortDesc = @model";
+
+        using SqlCommand cmd = new (sql, conn);
+        cmd.Parameters.AddWithValue("@model", toValidate);
+
+        int count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
+
+        return count > 0;
+    }
+
+    /// <summary>
+    /// Copies the contents of <paramref name="dt"/> to the foolproof info table over <paramref name="conn"/>.
+    /// </summary>
+    /// <param name="dt">The DataTable to be uploaded to the foolproof info table.</param>
+    /// <param name="conn">The connection to use to access the database.</param>
+    /// <returns>A Task representing that the upload is complete.</returns>
+    public static async Task ExecuteBulkCopy(DataTable dt, SqlConnection conn)
+    {
+        using SqlBulkCopy bulkCopy = new (conn);
+        bulkCopy.DestinationTableName = "dbo.FoolproofInfo";
+
+        // Force SqlBulkCopy to respect column NAMES, not POSITIONS
+        bulkCopy.ColumnMappings.Add("model", "model");
+        bulkCopy.ColumnMappings.Add(RevisionColName, RevisionColName);
+        bulkCopy.ColumnMappings.Add("issueDate", "issueDate");
+        bulkCopy.ColumnMappings.Add("issuer", "issuer");
+        bulkCopy.ColumnMappings.Add("failureMode", "failureMode");
+        bulkCopy.ColumnMappings.Add("rank", "rank");
+        bulkCopy.ColumnMappings.Add(LocationColName, LocationColName);
+        bulkCopy.ColumnMappings.Add(DummySampleColName, DummySampleColName);
+
+        await bulkCopy.WriteToServerAsync(dt);
+    }
+
+    /// <summary>
+    /// Wrapper for <see cref="WriteRowToDatabase"/> that provides a status update.
+    /// </summary>
+    /// <param name="dr">The DataRow to write.</param>
+    /// <param name="conn">The SqlConnection to use for the row write attempt.</param>
+    /// <returns>A <see cref="ParseResult"/> representing this particular row's errors, and a <see cref="Report"/> containing the message to display (in case of error).</returns>
+    public static async Task<(ParseResult rowResult, Report? skipReport)> TryWriteRow(DataRow dr, SqlConnection conn)
+    {
+        try
+        {
+            await WriteRowToDatabase(dr, conn);
+            return default;
+        }
+        catch (SqlException rowEx) when (rowEx.Number == 2627 || rowEx.Number == 2601)
+        {
+            return (new ParseResult(hasDuplicate: true), new ($"\t[ROW SKIP] Duplicate: Rev {dr[RevisionColName]}, Location {dr[LocationColName]} Dummy #{dr[DummySampleColName]}\n", ReportLevel.WARNING));
+        }
+        catch (Exception rowEx)
+        {
+            return (new ParseResult(hasDuplicate: true), new ($"\t[ROW SKIP] Error: {rowEx.Message}\n", ReportLevel.ERROR));
+        }
+    }
+
+    /// <summary>
+    /// Asynchronously writes the input DataRow's contents to the FP info table.
+    /// Only use this method after attempting (and failing) a bulk copy.
+    /// </summary>
+    /// <param name="dr">The DataRow whose contents will be written to the server.</param>
+    /// <param name="conn">The open SQL connection to be used in the SqlCommand.</param>
+    /// <returns>A Task representing the completion (or failure) of the insertion.</returns>
+    private static async Task WriteRowToDatabase(DataRow dr, SqlConnection conn)
+    {
+        string sql = @"
+            INSERT INTO dbo.FoolproofInfo
+            (model, revision, issueDate, issuer, failureMode, rank, location, dummySampleNum)
+            VALUES
+            (@model, @revision, @issueDate, @issuer, @failureMode, @rank, @location, @dummySampleNum)";
+
+        using SqlCommand cmd = new (sql, conn);
+
+        // Mapping parameters from the DataRow
+        cmd.Parameters.Add("@model", SqlDbType.VarChar, 32).Value = dr["model"];
+        cmd.Parameters.Add("@revision", SqlDbType.TinyInt).Value = dr[RevisionColName];
+        cmd.Parameters.Add("@issueDate", SqlDbType.Date).Value = dr["issueDate"];
+        cmd.Parameters.Add("@issuer", SqlDbType.VarChar, 32).Value = dr["issuer"];
+        cmd.Parameters.Add("@failureMode", SqlDbType.VarChar, 100).Value = dr["failureMode"];
+        cmd.Parameters.Add("@rank", SqlDbType.Char, 1).Value = dr["rank"];
+        cmd.Parameters.Add("@location", SqlDbType.VarChar, 100).Value = dr[LocationColName];
+        cmd.Parameters.Add("@dummySampleNum", SqlDbType.SmallInt).Value = dr[DummySampleColName];
+
+        await cmd.ExecuteNonQueryAsync();
+    }
+}

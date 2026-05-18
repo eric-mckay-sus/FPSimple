@@ -192,7 +192,7 @@ public class ModelMappingUploader
         await this.Report("Connecting...");
         using SqlConnection connection = new (connectionString);
         await connection.OpenAsync();
-        using SqlTransaction transaction = connection.BeginTransaction();
+        using SqlTransaction transaction = (SqlTransaction)await connection.BeginTransactionAsync();
         await this.Report("Connected!\n");
 
         try
@@ -200,7 +200,7 @@ public class ModelMappingUploader
             // Now parsing is complete, prepare to completely overwrite old DB state with new
             using (var deleteCommand = new SqlCommand("TRUNCATE TABLE EL2AuthorizedReset.dbo.ModelToLine", connection, transaction))
             {
-                deleteCommand.ExecuteNonQuery();
+                await deleteCommand.ExecuteNonQueryAsync();
             }
 
             await this.Report("Uploading...");
@@ -213,7 +213,7 @@ public class ModelMappingUploader
         }
         catch (Exception ex)
         {
-            transaction.Rollback();
+            await transaction.RollbackAsync();
             await this.Report($"Bulk Copy Error: {ex.Message}\n", ReportLevel.ERROR);
         }
     }

@@ -61,11 +61,15 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     /// <summary>
     /// When this page is closed, dispose as defined by the parent, then clean up the debounce cancellation token.
     /// </summary>
-    public override void Dispose()
+    /// <param name="disposing">Whether to actually dispose. This is a help for the garbage collector.</param>
+    protected override void Dispose(bool disposing)
     {
-        base.Dispose();
-        this.logDebounce?.Cancel();
-        this.logDebounce?.Dispose();
+        base.Dispose(disposing);
+        if (disposing)
+        {
+            this.logDebounce?.Cancel();
+            this.logDebounce?.Dispose();
+        }
     }
 
     /// <summary>
@@ -108,7 +112,11 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         // Do the same for the output provider events
         this.Reporter.OnNotify += async () =>
         {
-            this.logDebounce?.Cancel();
+            if (this.logDebounce != null)
+            {
+                await this.logDebounce.CancelAsync();
+            }
+
             this.logDebounce = new ();
             CancellationToken token = this.logDebounce.Token;
             try
@@ -173,7 +181,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         foreach (IBrowserFile file in this.selectedFiles)
         {
             string trustedFileName = $"{Path.GetFileNameWithoutExtension(file.Name)}_{DateTime.Now:yyyy-MM-dd}{Path.GetExtension(file.Name)}";
-            string filePath = Path.Combine(this.UploadsFolderPath, trustedFileName);
+            string filePath = Path.Combine(UploadsFolderPath, trustedFileName);
 
             // Stream the file data from the element to the server (must use block using statement to close stream before the uploader tries to create a new one)
             using (FileStream stream = new (filePath, FileMode.Create))
@@ -185,7 +193,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
         this.Reporter.InitializeProgress(this.selectedFiles.Count);
         FPSheetUploader uploader = new (this.InputProvider, this.Reporter);
-        return await uploader.ExecuteAsync(this.UploadsFolderPath); // Batch it even when only one file (for simplicity)
+        return await uploader.ExecuteAsync(UploadsFolderPath); // Batch it even when only one file (for simplicity)
     }
 
     /// <summary>
@@ -195,6 +203,31 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
 
     [System.Text.RegularExpressions.GeneratedRegex(@" \(.*?\)")]
     private static partial Regex ParenthesesClipper();
+
+    /// <summary>
+    /// Gets the CSS class for the badge based on the file result.
+    /// </summary>
+    /// <param name="file">The file result to get the badge style for.</param>
+    /// <returns>The CSS class for the badge.</returns>
+    private static string GetBadgeStyle(FileResult file)
+    {
+        if (file.parseResult.AlreadyUploaded)
+        {
+            return "table-warning-light";
+        }
+        else if (file.parseResult.HasFormatError)
+        {
+            return "table-danger-light";
+        }
+        else if (file.parseResult.HasMiscError)
+        {
+            return "table-danger-light";
+        }
+        else
+        {
+            return string.Empty;
+        }
+    }
 
     /// <summary>
     /// Converts the DataTable from the Reporter into a list of DTOs for the UniversalTable.

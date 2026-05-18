@@ -96,18 +96,18 @@ else if (Items != null && Items.Any())
                 <tr>
                     @foreach (var prop in GetVisibleProperties())
                     {
+                        @* Show internal column name (from SQL) but fall back to actual property name *@
                         var attribute = prop.GetCustomAttribute<ColumnAttribute>();
                         string displayName = attribute?.Name ?? prop.Name;
-                        bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
                         <th @onclick="() => OnSort.InvokeAsync(prop.Name)"
-                            class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (isExpanded ? "verbose-visible" : "verbose-hidden") : "")"
+                            class="@(GetPropertyClass(prop))"
                             style=@(OnSort.HasDelegate ? "cursor:pointer" : "cursor:auto")
                             title=@(OnSort.HasDelegate ? $"Toggle sort for {displayName}" : "")>
                                 @displayName @SortIcon(prop.Name)
                         </th>
                     }
                         @if (this.ShowActions){
-                        <th>Actions</th> @* For the expand, print, approve, and remake buttons *@
+                        <th>Actions</th> @* For the expand, print, approve, deny, and remake buttons *@
                     }
                 </tr>
             </thead>
@@ -118,8 +118,7 @@ else if (Items != null && Items.Any())
                         class="@GetRowClass(item)">
                         @foreach (var prop in GetVisibleProperties())
                         {
-                            bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
-                            <td class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (isExpanded ? "verbose-visible" : "verbose-hidden") : "")">@(prop.GetValue(item)?.ToString() ?? "—")</td>
+                            <td class="@GetPropertyClass(prop)">@(prop.GetValue(item)?.ToString() ?? "—")</td>
                         }
                         @if (this.ShowActions) {
                             <td>

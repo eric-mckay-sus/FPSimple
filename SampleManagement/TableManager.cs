@@ -12,18 +12,29 @@ using System.Linq.Dynamic.Core;
 using InterProcessIO;
 
 /// <summary>
-/// Minimal table logic for loading and paging data from <see cref="FPSampleDbContext"/>.
-/// Designed to provide the data needed by <see cref="Components.Common.UniversalTable{T}"/> for display.
+/// Non-generic parent of <see cref="TableManager{T}"/> to contain static information.
 /// </summary>
-/// <typeparam name="T">The EF entity type to load.</typeparam>
-public class TableManager<T> : ComponentBase
-    where T : class
+public class TableManagerBase : ComponentBase
 {
     /// <summary>
     /// The maximum allowable sorts active at once.
     /// </summary>
-    private static readonly byte MaxSorts = 2;
+    protected static readonly byte MaxSorts = 2;
 
+    /// <summary>
+    /// The array of Unicode digits to use for arrow subscript building.
+    /// </summary>
+    protected static readonly char[] SubscriptDigits = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
+}
+
+/// <summary>
+/// Minimal table logic for loading and paging data from <see cref="FPSampleDbContext"/>.
+/// Designed to provide the data needed by <see cref="Components.Common.UniversalTable{T}"/> for display.
+/// </summary>
+/// <typeparam name="T">The EF entity type to load.</typeparam>
+public class TableManager<T> : TableManagerBase
+    where T : class
+{
     /// <summary>
     /// Gets or sets this upload page's input provider.
     /// </summary>
@@ -143,7 +154,7 @@ public class TableManager<T> : ComponentBase
     /// Cycle order: None -> Asc -> Desc. All sort columns are "drive to zero". Toggling an already-sorted column simply follows the cycle.
     /// When a column is toggled to <see cref="SortDir.None"/>, the sort is removed from the list, freeing up a sort slot and promoting all lesser sorts.
     /// For example, toggling column B with the sort list [{col A, asc}, {col B, desc}, {col C, asc}] promotes col C and leaves col A unaffected, resulting in [{col A, asc}, {col C, asc}]
-    /// The number of available sorts may be modified (to increase customization or to simplify) with <see cref="MaxSorts"/>.
+    /// The number of available sorts may be modified (to increase customization or to simplify) with <see cref="TableManagerBase.MaxSorts"/>.
     /// When toggling a new column, it is assigned the highest available sort priority. If there are no open sort slots, it overwrites the lowest priority sort.
     /// Sort priority is visualized with the subscript next to the sort arrow.
     /// </summary>
@@ -323,24 +334,29 @@ public class TableManager<T> : ComponentBase
     }
 
     /// <summary>
-    /// Converts an integer into Unicode subscript characters.
+    /// Converts a 1-digit or 2-digit integer into Unicode subscript characters.
+    /// Designed for enumerating sort priority
+    /// Specifically designed not to be extensible in order to avoid issues with looped string concatenation.
     /// </summary>
     private static string GetSubscript(int number)
     {
-        // If it's the primary sort, we return empty to keep the UI clean
-        if (number == 1)
+        // If it's the primary sort, we return empty (actually draws MORE attention)
+        if (number <= 1)
         {
             return string.Empty;
         }
 
-        char[] subscriptDigits = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
-        string result = string.Empty;
-
-        foreach (char c in number.ToString())
+        // For a 2-digit number
+        if (number >= 10)
         {
-            result += subscriptDigits[c - '0'];
+            return string.Create(2, number, (span, num) =>
+            {
+                span[0] = SubscriptDigits[(num / 10) % 10];
+                span[1] = SubscriptDigits[num % 10];
+            });
         }
 
-        return result;
+        // For a 1-digit number
+        return SubscriptDigits[number].ToString();
     }
 }

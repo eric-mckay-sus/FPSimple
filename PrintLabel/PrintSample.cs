@@ -45,7 +45,6 @@ public partial class ZebraUploadPrint
 
         printCmd.SampleId = sampleId;
 
-        // TODO want to ask for explicit filepath from console, but offer file input to Blazor. New method in IInputProvider?
         // User probably wants to stick with the config file option for print the majority of the time; how to lean toward that?
         string potentialTemplatePath;
         do
@@ -107,7 +106,7 @@ public partial class ZebraUploadPrint
             return;
         }
 
-        string toUpload = File.ReadAllText(printCmd.TemplatePath);
+        string toUpload = await File.ReadAllTextAsync(printCmd.TemplatePath);
         toUpload = string.Format(toUpload, fields);
 
         // Stream loaded template to printer (printer executes immediately)

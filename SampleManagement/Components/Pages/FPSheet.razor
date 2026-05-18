@@ -225,21 +225,25 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (FileResult result in GetBatchSummary())
+                    @foreach (FileResult file in GetBatchSummary())
                     {
-                        <tr class="@(result.hadErrors ? "table-danger-light" : result.hadDuplicates ? "table-warning-light" : "")">
-                            <td class="fw-bold">@Path.GetFileName(result.file)</td>
-                            <td class="fw-bold">@result.model</td>
+                        <tr class="@GetBadgeStyle(file)">
+                            <td class="fw-bold">@Path.GetFileName(file.file)</td>
+                            <td class="fw-bold">@file.model</td>
                             <td class="text-center">
-                                @if (result.alreadyUploaded)
+                                @if (file.parseResult.AlreadyUploaded)
                                 {
                                     <Badge Color="BadgeColor.Danger">Duplicate File Skipped</Badge>
                                 }
-                                else if (result.hadErrors)
+                                else if (file.parseResult.HasMiscError)
                                 {
                                     <Badge Color="BadgeColor.Danger">Error</Badge>
                                 }
-                                else if (result.hadDuplicates)
+                                else if (file.parseResult.HasFormatError)
+                                {
+                                    <Badge Color="BadgeColor.Danger">Duplicate Entries Skipped</Badge>
+                                }
+                                else if (file.parseResult.HasDuplicate)
                                 {
                                     <Badge Color="BadgeColor.Warning">Duplicate Entries Skipped</Badge>
                                 }
@@ -248,11 +252,12 @@
                                     <Badge Color="BadgeColor.Success">Success</Badge>
                                 }
                             </td>
-                            <td class="text-center">@result.rowsUploaded</td>
+                            <td class="text-center">@file.rowsUploaded</td>
                             <td>
-                                @if (result.alreadyUploaded) { <span class="text-danger small">This file was already uploaded for this model.</span>}
-                                else if (result.hadErrors) { <span class="text-danger small">Check logs for details.</span> }
-                                else if (result.hadDuplicates) { <span class="text-muted small">Existing entries were not modified.</span> }
+                                @if (file.parseResult.AlreadyUploaded) { <span class="text-danger small">This file was already uploaded for this model.</span> }
+                                else if (file.parseResult.hasFormatError) { <span class="text-danger small">This file did not match the format of an FP data sheet.</span> }
+                                else if (file.parseResult.hasDuplicate) { <span class="text-muted small">Existing entries were not modified.</span> }
+                                else if (file.parseResult.hasMiscError) { <span class="text-danger small">Check logs for details.</span> }
                                 else { <span class="text-success small">Completed successfully.</span> }
                             </td>
                         </tr>

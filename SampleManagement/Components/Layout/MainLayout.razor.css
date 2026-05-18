@@ -11,27 +11,22 @@
         width: 100vw;
         height: 100vh;
         background-color: rgba(0, 0, 0, 0.2); /* The "dim" color */
-        z-index: 999; /* Higher than 'main' but lower than 'sidebar' */
+        z-index: 20; /* Must be higher than main class but lower than sidebar class */
         opacity: 0;
         pointer-events: none; /* Allows clicking through the dim when hidden */
-        transition: opacity 0.3s ease;
-    }
 
-    /* If page contains a sidebar that is hovered, dim the background */
-    .page:has(.sidebar:hover)::after {
-        opacity: 1;
+        backdrop-filter: blur(1.5px);
+        -webkit-backdrop-filter: blur(1.5px);
+        transition: opacity 0.3s ease;
     }
 
 main {
     margin-left: 3.75rem; /* Give navbar room */
     width: auto;
     transition: margin-left 0.2s ease;
+    max-width: 100%;
+    overflow-x: hidden;
 }
-
-    .page:has(.sidebar:hover) main {
-        filter: blur(1.5px);
-        transition: filter 0.2s ease;
-    }
 
 .sidebar {
     /* Overlay */
@@ -39,7 +34,7 @@ main {
     left: 0;
     top: 0;
     bottom: 0;
-    z-index: 1001;
+    z-index: 1050;
 
     /* shape */
     width: 3.75rem;
@@ -53,9 +48,17 @@ main {
     border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-    .sidebar:hover {
+    .sidebar.sidebar-expanded {
         width: 250px;
-        box-shadow: 5px 0 15px rgba(0,0,0,0.3); /* perceived depth */
+        box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+    }
+
+    .page:has(.sidebar-expanded)::after {
+        opacity: 1;
+    }
+
+    .page:has(.sidebar-expanded) main {
+        transition: filter 0.2s ease;
     }
 
 @media (max-width: 640.98px) {
@@ -134,14 +137,26 @@ html, body {
     position: relative;
 }
 
-/* Ensure the main content area doesn't expand from negative row margins */
-main {
-    max-width: 100%;
-    overflow-x: hidden;
-}
-
 /* This targets the specific Bootstrap row bleed */
 .row {
     margin-right: 0 !important;
     margin-left: 0 !important;
+}
+
+@media (hover: hover) {
+    .sidebar:hover {
+        width: 250px;
+        box-shadow: 5px 0 15px rgba(0,0,0,0.3); /* perceived depth */
+    }
+
+    /* If page contains a sidebar that is hovered, dim the background */
+    .page:has(.sidebar:hover)::after {
+        opacity: 1;
+    }
+
+    /* When the sidebar is expanded, dim the main page */
+    .page:has(.sidebar:hover) main {
+        filter: blur(1.5px);
+        transition: filter 0.2s ease;
+    }
 }

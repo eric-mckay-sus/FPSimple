@@ -17,11 +17,6 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     where T : class
 {
     /// <summary>
-    /// This session's unique ID (for naming this session's directory).
-    /// </summary>
-    private static readonly string SessionId = Guid.NewGuid().ToString();
-
-    /// <summary>
     /// Gets or sets the JavaScript runtime for reload protection.
     /// </summary>
     [Inject]
@@ -30,7 +25,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     /// <summary>
     /// Gets the path of the uploads folder for this session.
     /// </summary>
-    protected string UploadsFolderPath => Path.Combine(Path.GetTempPath(), "uploads", SessionId);
+    protected static string UploadsFolderPath { get => Path.Combine(Path.GetTempPath(), "uploads", field); } = Guid.NewGuid().ToString();
 
     /// <summary>
     /// Gets or sets a value indicating whether the user is dragging a file over the file input location.
@@ -88,19 +83,33 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     protected string UserInputText { get; set; } = string.Empty;
 
     /// <summary>
+    /// Signature and pattern in order to implement IDisposable.
+    /// Note: GC stands for garbage collector, which internally calls Dispose(false). By calling Dispose(true) here, we effectively circumvent that with the manual disposal.
+    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
     /// When this component unloads, unload the timer and its cancellation token.
     /// </summary>
-    public virtual void Dispose()
+    /// <param name="disposing">Whether to actually dispose. This is a help for the garbage collector.</param>
+    protected virtual void Dispose(bool disposing)
     {
-        // Fire the CancellationToken, dispose immediately
-        this.TimerCts?.Cancel();
-        this.TimerCts?.Dispose();
+        if (disposing)
+        {
+            // Fire the CancellationToken, dispose immediately
+            this.TimerCts?.Cancel();
+            this.TimerCts?.Dispose();
 
-        // Dispose the timer
-        this.ProgressTimer?.Dispose();
+            // Dispose the timer
+            this.ProgressTimer?.Dispose();
 
-        this.CleanupFileSystem();
-        this.IsUploading = false;
+            this.CleanupFileSystem();
+            this.IsUploading = false;
+        }
     }
 
     /// <summary>
@@ -111,10 +120,10 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
         try
         {
             // Skip directory delete if there were no selected files (thus no need to create a directory)
-            if (Directory.Exists(this.UploadsFolderPath))
+            if (Directory.Exists(UploadsFolderPath))
             {
                 // Use recursive mode to delete the directory AND its contents
-                Directory.Delete(this.UploadsFolderPath, true);
+                Directory.Delete(UploadsFolderPath, true);
             }
         }
         catch (IOException ex)
@@ -132,8 +141,12 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     protected async Task StartProgressSimulation()
     {
         // Cancel any existing progress timer
-        this.TimerCts?.Cancel();
-        this.TimerCts?.Dispose();
+        if (this.TimerCts != null)
+        {
+            await this.TimerCts.CancelAsync();
+            this.TimerCts?.Dispose();
+        }
+
         this.TimerCts = new ();
         CancellationToken token = this.TimerCts.Token;
 
@@ -197,7 +210,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
 
         try
         {
-            Directory.CreateDirectory(this.UploadsFolderPath);
+            Directory.CreateDirectory(UploadsFolderPath);
             await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
 
             // Execute the specific logic passed from the child
@@ -219,7 +232,8 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
                     break;
                 case UploadResult.ErroredOut:
                     Report? error = this.Reporter.Logs.FirstOrDefault();
-                    throw new Exception($"{error?.message ?? "There was an error that prevented your upload from completing"}. Please verify your file.");
+                    this.ToastService.Notify(new (ToastType.Danger, $"{error?.message ?? "There was an error that prevented your upload from completing"}. Please verify your file."));
+                    break;
                 case UploadResult.Canceled:
                     this.ProgressPercent = 100;
                     this.ToastService.Notify(new (ToastType.Secondary, "Upload canceled."));

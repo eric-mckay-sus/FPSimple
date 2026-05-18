@@ -138,7 +138,7 @@ h1:focus {
 .res-table thead th {
     position: sticky;
     top: 0;
-    z-index: 20;
+    z-index: 5;
     background-color: #f8f9fa;
     color: #495057;
     font-weight: 600;
@@ -322,7 +322,6 @@ h1:focus {
     border-radius: 25px;
     padding: 2vh;
     margin-bottom: 5px;
-    justify-content: center;
     text-align: center;
     width: 140vh;
     height: 20vh;
