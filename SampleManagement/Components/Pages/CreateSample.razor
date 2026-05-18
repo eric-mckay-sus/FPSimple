@@ -97,8 +97,10 @@
         <span class="form-label mb-0 me-2">DPI: </span>
         <div class="me-2">
             <select @bind="printDpi" class="form-select" style="width: auto;" disabled="@isPrinting">
-                <option value="203">203</option>
-                <option value="304">304</option>
+                @foreach (int dpi in Config.DpiToTemplatePath.Keys)
+                {
+                    <option value="@dpi">@dpi</option>
+                }
             </select>
         </div>
         @if (printModeEngaged)
