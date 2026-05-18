@@ -47,6 +47,11 @@ public partial class CreateSample : TableManager<Sample>
     // UI properties
 
     /// <summary>
+    /// The DPI to with which to print samples.
+    /// </summary>
+    private int printDpi = Config.PrinterDpi;
+
+    /// <summary>
     /// The number of samples successfully printed in the current batch.
     /// </summary>
     private int printed = 0;
@@ -296,9 +301,9 @@ public partial class CreateSample : TableManager<Sample>
         this.isPrinting = true;
         try
         {
-            ZplCommand cmd = new () { SampleId = sample.SampleId };
-            ZebraUploadPrint zupObject = new (this.InputProvider, this.Reporter);
-            Report statusReport = await zupObject.ExecuteAsync(cmd);
+            ZplCommand cmd = new () { SampleId = sample.SampleId, PrintDpi = this.printDpi };
+            ZebraPrintFlow printObject = new (this.InputProvider, this.Reporter);
+            Report statusReport = await printObject.ExecuteAsync(cmd);
             if (statusReport.level == ReportLevel.SUCCESS)
             {
                 this.ToastService.Notify(new (ToastType.Success, $"Sample {sample.SampleId} sent to printer."));
@@ -332,7 +337,7 @@ public partial class CreateSample : TableManager<Sample>
         using TcpClient conn = new ();
         try
         {
-            await conn.ConnectAsync(PrintLabel.Config.PrinterIp, PrintLabel.Config.PrinterPort, this.printCts.Token);
+            await conn.ConnectAsync(Config.PrinterIp, Config.PrinterPort, this.printCts.Token);
 
             foreach (Sample sample in this.selectedForPrint)
             {
@@ -340,9 +345,9 @@ public partial class CreateSample : TableManager<Sample>
                 this.printCts.Token.ThrowIfCancellationRequested();
 
                 // Create a print request for each sample
-                ZplCommand cmd = new () { SampleId = sample.SampleId };
-                ZebraUploadPrint zupObject = new (this.InputProvider, this.Reporter);
-                Report statusReport = await zupObject.ExecuteAsync(cmd, conn, leaveOpen: true);
+                ZplCommand cmd = new () { SampleId = sample.SampleId, PrintDpi = this.printDpi };
+                ZebraPrintFlow printObject = new (this.InputProvider, this.Reporter);
+                Report statusReport = await printObject.ExecuteAsync(cmd, conn, leaveOpen: true);
                 if (statusReport.level == ReportLevel.SUCCESS)
                 {
                     this.ToastService.Notify(new (ToastType.Success, $"Sample #{sample.SampleId} sent to printer."));
@@ -354,7 +359,7 @@ public partial class CreateSample : TableManager<Sample>
                     failedSamples.Add(sample);
                 }
 
-                await Task.Delay(PrintLabel.Config.InterPrintDelayMs, this.printCts.Token); // Wait a second between prints to ensure each toast is visible and that printer isn't overloaded
+                await Task.Delay(Config.InterPrintDelayMs, this.printCts.Token); // Wait a second between prints to ensure each toast is visible and that printer isn't overloaded
             }
 
             // By setting selectedForPrint to only the failed IDs, the user can see easily which samples to investigate

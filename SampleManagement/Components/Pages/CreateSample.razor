@@ -93,7 +93,16 @@
         </div>
     </div>
 
-    <div class="d-flex justify-content-end mb-1">
+    <div class="d-flex align-items-center justify-content-end mb-1">
+        <span class="form-label mb-0 me-2">DPI: </span>
+        <div class="me-2">
+            <select @bind="printDpi" class="form-select" style="width: auto;" disabled="@isPrinting">
+                @foreach (int dpi in Config.DpiToTemplatePath.Keys)
+                {
+                    <option value="@dpi">@dpi</option>
+                }
+            </select>
+        </div>
         @if (printModeEngaged)
         {
             <button class="btn btn-danger me-2"

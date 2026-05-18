@@ -9,7 +9,7 @@
             <div class="text-muted me-3">Showing @StartRecord to @EndRecord of @TotalCount</div>
             @* Page Size Dropdown *@
             <div class="d-flex align-items-center me-3">
-                <span class="text-muted me-2">Rows:</span>
+                <span class="form-label mb-0 me-1">Rows:</span>
                 <select class="form-select form-select-sm" style="width:auto"
                         @onchange="async (e) => await OnPageSizeChange.InvokeAsync(int.TryParse(e.Value?.ToString(), out int i) ? i : 25)">
                     <option value="10" selected="@(PageSize == 10)">10</option>
@@ -19,7 +19,7 @@
                     <option value="500" selected="@(PageSize == 500)">500</option>
                 </select>
             </div>
-            <Button Color="ButtonColor.Secondary" Outline="true" @onclick="ClearFilters">Clear Filters</Button>
+            <Button Color="ButtonColor.Secondary" Size="ButtonSize.Small" Outline="true" @onclick="ClearFilters">Clear Filters</Button>
         </div>
         <nav>
             <ul class="pagination mt-3">

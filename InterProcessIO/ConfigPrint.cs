@@ -1,25 +1,29 @@
-// <copyright file="Config.cs" company="Stanley Electric US Co. Inc.">
+// <copyright file="ConfigPrint.cs" company="Stanley Electric US Co. Inc.">
 // Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
 // </copyright>
 
-namespace PrintLabel;
+namespace InterProcessIO;
 
 using StringBuilder = Microsoft.Data.SqlClient.SqlConnectionStringBuilder;
 
 /// <summary>
-/// A container for the data that is constant in PrintLabel (but could change).
+/// A container for the data that is constant in the print utility (but could change).
 /// </summary>
-public static class Config
+public static partial class Config
 {
     /// <summary>
     /// Gets the printer's DPI. MUST be 203 or 304 for a valid print.
     /// </summary>
-    public static int PrinterDpi { get; } = 304;
+    public static int PrinterDpi { get; } = 203;
 
     /// <summary>
-    /// Gets the path to the template file.
+    /// Gets the label template path from the input DPI.
     /// </summary>
-    public static string TemplatePath { get; } = PrinterDpi == 304 ? @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample304.zpl" : @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample203.zpl";
+    public static Dictionary<int, string> DpiToTemplatePath { get; } = new ()
+    {
+        [203] = @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample203.zpl",
+        [304] = @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample304.zpl",
+    };
 
     /// <summary>
     /// Gets the safe size limit for a ZPL file (RAM precaution).

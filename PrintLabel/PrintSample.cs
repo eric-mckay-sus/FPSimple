@@ -12,10 +12,10 @@ using System.Net.Sockets;
 /// <summary>
 /// Defines methods used to print a sample.
 /// </summary>
-public partial class ZebraUploadPrint
+public partial class ZebraPrintFlow
 {
     /// <summary>
-    /// Prompts for and validates the information necessary for a print command (sample ID and print path).
+    /// Prompts for and validates the information necessary for a print command (sample ID and print DPI).
     /// </summary>
     /// <param name="printCmd">The <see cref="ZplCommand"/> in which to assign the print path.</param>
     /// <returns>A Task representing that the sample ID and print path have been provided.</returns>
@@ -45,32 +45,34 @@ public partial class ZebraUploadPrint
 
         printCmd.SampleId = sampleId;
 
-        // User probably wants to stick with the config file option for print the majority of the time; how to lean toward that?
-        string potentialTemplatePath;
+        // Template path will be generated from the target DPI
+        string potentialDpi;
+        int printDpi;
         do
         {
             error = null; // Don't persist error from last iteration or from sample ID prompt
-            potentialTemplatePath = await this.input.GetInputAsync(new ("Please enter the filename of the template ZPL to print (or just press ENTER to use the config file default): "), error);
+            potentialDpi = await this.input.GetInputAsync(new ("Please enter the DPI of the target printer (or just press ENTER to use the config file default): "), error);
 
-            // Leave on default and end prompting immediately on empty input
-            if (potentialTemplatePath.Equals(string.Empty))
+            // Use default and end prompting immediately on empty input
+            if (potentialDpi.Equals(string.Empty))
             {
+                printCmd.PrintDpi = Config.PrinterDpi;
                 return;
             }
 
             // Set error message if applicable (first one holds)
-            if (!Path.GetExtension(potentialTemplatePath).Equals(".zpl"))
+            if (!int.TryParse(potentialDpi, out printDpi))
             {
-                error = $"File {potentialTemplatePath} is not a ZPL file. Please try again";
+                error = $"DPI '{potentialDpi}' is not an integer. Please try again.";
             }
-            else if (!File.Exists(potentialTemplatePath))
+            else if (!Config.DpiToTemplatePath.ContainsKey(printDpi))
             {
-                error = $"File '{potentialTemplatePath}' was not found on this computer. Please try again.";
+                error = $"There is no configured option to print at {potentialDpi} DPI. Please try again.";
             }
         }
         while (error != null);
 
-        printCmd.TemplatePath = potentialTemplatePath;
+        printCmd.PrintDpi = printDpi; // Could also store print template path in ZplCommand, but that wouldn't change the fact that we need to check the DPI in PrintAsync for direct calls to ExecuteAsync
     }
 
     /// <summary>
@@ -82,6 +84,17 @@ public partial class ZebraUploadPrint
     public async Task PrintAsync(ZplCommand printCmd, NetworkStream stream)
     {
         string[] fields;
+        string templatePath;
+
+        if (Config.DpiToTemplatePath.TryGetValue(printCmd.PrintDpi, out string? path))
+        {
+            templatePath = path;
+        }
+        else
+        {
+            await this.Report($"There is no configured option to print at {printCmd.PrintDpi} DPI. Cancelling print...");
+            return;
+        }
 
         using (SqlConnection sqlConn = new (Config.GetConnectionString()))
         {
@@ -97,16 +110,16 @@ public partial class ZebraUploadPrint
             return;
         }
 
-        FileInfo templateInfo = new (printCmd.TemplatePath);
+        FileInfo templateInfo = new (templatePath);
         int kbSize = Convert.ToInt32(templateInfo.Length / 1024);
 
         if (kbSize > Config.KbLimit)
         {
-            await this.Report($"{printCmd.TemplatePath} exceeds the size limit of {Config.KbLimit}KB. Canceling upload...", ReportLevel.ERROR);
+            await this.Report($"{templatePath} exceeds the size limit of {Config.KbLimit}KB. Canceling upload...", ReportLevel.ERROR);
             return;
         }
 
-        string toUpload = await File.ReadAllTextAsync(printCmd.TemplatePath);
+        string toUpload = await File.ReadAllTextAsync(templatePath);
         toUpload = string.Format(toUpload, fields);
 
         // Stream loaded template to printer (printer executes immediately)
