@@ -63,34 +63,37 @@ else if (Items != null && Items.Any())
                     {
                         <td>
                             @if (prop.Name == "Model" && ModelFilter != null)
-                                {
-                                    <div class="centered-container">
-                                        <input class="form-control form-control-sm mt-1"
-                                            style="width: 10rem;"
-                                            id="model-filter"
-                                            placeholder="Filter model..."
-                                            value="@ModelFilter.Value"
-                                            autocomplete="off"
-                                            @onclick:stopPropagation
-                                            @oninput="e => _ = HandleFilterInput(ModelFilter, e.Value?.ToString())" />
-                                    </div>
-                                }
+                            {
+                                <div class="centered-container">
+                                    <input class="form-control form-control-sm mt-1"
+                                        style="width: 10rem;"
+                                        id="model-filter"
+                                        placeholder="Filter model..."
+                                        value="@ModelFilter.Value"
+                                        autocomplete="off"
+                                        @onclick:stopPropagation
+                                        @oninput="e => _ = HandleFilterInput(ModelFilter, e.Value?.ToString())" />
+                                </div>
+                            }
 
-                                @if (prop.Name == "Line" && LineFilter != null)
-                                {
-                                    <div class="centered-container">
-                                        <input class="form-control form-control-sm mt-1"
-                                            style="width: 10rem;"
-                                            id="line-filter"
-                                            placeholder="Filter line..."
-                                            value="@LineFilter.Value"
-                                            autocomplete="off"
-                                            @onclick:stopPropagation
-                                            @oninput="e => _ = HandleFilterInput(LineFilter, e.Value?.ToString())" />
-                                    </div>
-
-                                }
+                            @if (prop.Name == "Line" && LineFilter != null)
+                            {
+                                <div class="centered-container">
+                                    <input class="form-control form-control-sm mt-1"
+                                        style="width: 10rem;"
+                                        id="line-filter"
+                                        placeholder="Filter line..."
+                                        value="@LineFilter.Value"
+                                        autocomplete="off"
+                                        @onclick:stopPropagation
+                                        @oninput="e => _ = HandleFilterInput(LineFilter, e.Value?.ToString())" />
+                                </div>
+                            }
                         </td>
+                    }
+                    @if (ShowActions)
+                    {
+                        <td />
                     }
                 </tr>
                 <tr>
@@ -114,7 +117,7 @@ else if (Items != null && Items.Any())
             <tbody>
                 <Virtualize TItem="T" Items="@(Items?.ToList())" Context="item" OverscanCount="8" ItemSize="41">
                     <tr @key="item"
-                        @onclick="() => attentionItem=attentionItem?.Equals(item) == true ? default : item"
+                        @onclick="() => ToggleAttentionItem(item)"
                         class="@GetRowClass(item)">
                         @foreach (var prop in GetVisibleProperties())
                         {
@@ -126,7 +129,7 @@ else if (Items != null && Items.Any())
                                 @if (!PrintModeEngaged){
                                     @if(OnExpand.HasDelegate){
                                         <button class="btn btn-link btn-action p-0 text-secondary me-2"
-                                                @onclick="async () => { isExpanded = !isExpanded; await OnExpand.InvokeAsync(item); }"
+                                                @onclick="async () => await HandleExpand(item)"
                                                 @onclick:stopPropagation
                                                 title="Expand">
                                             @if (isExpanded) {

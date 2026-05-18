@@ -42,6 +42,8 @@ public partial class CreateSample : TableManager<Sample>
     /// </summary>
     private List<short> availableSampleNums = [];
 
+    private string lastModel = string.Empty;
+
     // UI properties
 
     /// <summary>
@@ -177,49 +179,50 @@ public partial class CreateSample : TableManager<Sample>
         bool hasModel = !string.IsNullOrEmpty(searchModel);
         bool hasLine = !string.IsNullOrEmpty(searchLine);
 
-        // If line is selected, use it for filtering
-        if (hasLine && !hasModel)
+        // These manual state checks look inefficient, but they are very readable, and the compiler optimizes them.
+        switch (hasModel, hasLine)
         {
-            this.availableModels = this.allMappings
-                .Where(x => x.Line == this.formData.WorkCenterCode)
-                .Select(x => x.Model)
-                .Distinct()
-                .OrderBy(x => x)
-                .ToList();
-        }
+            // If there's no model or line, clear any existing filters
+            case (false, false):
+                this.availableLines = this.allMappings.Select(m => m.Line).Distinct().OrderBy(x => x).ToList();
+                this.availableModels = this.allMappings.Select(m => m.Model).Distinct().OrderBy(x => x).ToList();
+                break;
 
-        // Otherwise, clear the line filter
-        else if (!hasLine && !hasModel)
-        {
-            this.availableModels = this.allMappings.Select(m => m.Model).Distinct().OrderBy(x => x).ToList();
-        }
+            // If line is selected, use it for filtering the models
+            case (false, true):
+                this.availableModels = this.allMappings
+                    .Where(x => x.Line == searchLine)
+                    .Select(x => x.Model)
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToList();
+                break;
 
-        // If model is selected, use it for filtering
-        if (hasModel && !hasLine)
-        {
-            this.availableLines = this.allMappings
-                .Where(x => x.Model == this.formData.Model)
-                .Select(x => x.Line)
-                .Distinct()
-                .OrderBy(x => x)
-                .ToList();
-        }
-
-        // Otherwise, clear the model filter
-        else if (!hasLine && !hasModel)
-        {
-            this.availableLines = this.allMappings.Select(m => m.Line).Distinct().OrderBy(x => x).ToList();
+            // If model is selected, use it for filtering the lines
+            case (true, false):
+                this.availableLines = this.allMappings
+                    .Where(x => x.Model == searchModel)
+                    .Select(x => x.Line)
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToList();
+                break;
         }
 
         // Update sample numbers when model is selected
         if (hasModel)
         {
-            this.availableSampleNums = await context.FoolproofInfo
-                .Where(f => f.Model == this.formData.Model)
-                .Select(f => f.DummySampleNum)
-                .Distinct()
-                .OrderBy(x => x)
-                .ToListAsync();
+            // Only hit DB when it's a new model
+            if (searchModel != this.lastModel)
+            {
+                this.availableSampleNums = await context.FoolproofInfo
+                    .Where(f => f.Model == searchModel)
+                    .Select(f => f.DummySampleNum)
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToListAsync();
+                this.lastModel = searchModel;
+            }
         }
         else
         {

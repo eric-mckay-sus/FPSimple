@@ -225,6 +225,27 @@ public partial class UniversalTable<T>
     /// </summary>
     private bool ShowActions => this.OnExpand.HasDelegate || this.OnPrint.HasDelegate || this.OnApprove.HasDelegate || this.OnRemake.HasDelegate;
 
+    private async Task HandleExpand(T item)
+    {
+        this.isExpanded = !this.isExpanded;
+        await this.OnExpand.InvokeAsync(item);
+    }
+
+    private void ToggleAttentionItem(T item)
+{
+    // Turn off attention style if on
+    if (this.attentionItem?.Equals(item) == true)
+    {
+        this.attentionItem = default;
+    }
+
+    // Turn on attention style if off (automatically revokes from current if one exists)
+    else
+    {
+        this.attentionItem = item;
+    }
+}
+
     private string GetRowClass(T item)
     {
         if (item.Equals(default))
