@@ -165,7 +165,7 @@ public partial class CreateSample : TableManager<Sample>
     /// <returns>The <paramref name="query"/> where remake date is null.</returns>
     protected override IQueryable<Sample> ApplyFilters(IQueryable<Sample> query)
     {
-        query = query.Where(s => s.IsActive || s.ApproverNum == null);
+        query = query.Where(s => s.ApproverNum == null);
 
         if (this.ModelFilter.Value != null && this.ModelFilter.IsActive)
         {
@@ -454,6 +454,10 @@ public partial class CreateSample : TableManager<Sample>
         catch (IOException e)
         {
             this.ToastService.Notify(new (ToastType.Danger, $"Error executing the print command: {e.Message}"));
+        }
+        catch (InvalidOperationException e)
+        {
+            this.ToastService.Notify(new (ToastType.Danger, e.Message));
         }
         finally
         {

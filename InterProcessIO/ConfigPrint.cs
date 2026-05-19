@@ -33,7 +33,7 @@ public static partial class Config
     /// <summary>
     /// Gets the printer's IP address from the environment variable.
     /// </summary>
-    public static string PrinterIp { get; } = GetRequired("ZEBRA_PRINTER_IP");
+    public static string PrinterIp => GetRequired("ZEBRA_PRINTER_IP");
 
     /// <summary>
     /// Gets the port through which the printer should be accessed.

@@ -165,8 +165,13 @@ public class ModelMappingUploader
                 return UploadResult.Canceled;
             }
 
-            await this.Upload(path, Config.GetConnectionString());
-            return UploadResult.Complete;
+            UploadResult uploadResult = await this.Upload(path, Config.GetConnectionString());
+            return uploadResult;
+        }
+        catch (CsvHelperException ex)
+        {
+            await this.Report($"CSV formatting error: {ex.Message}\n", ReportLevel.ERROR);
+            return UploadResult.ErroredOut;
         }
         catch (Exception ex)
         {
@@ -180,7 +185,7 @@ public class ModelMappingUploader
     /// </summary>
     /// <param name="filepath">The path of the CSV to upload.</param>
     /// <param name="connectionString">The DB connection string.</param>
-    private async Task Upload(string filepath, string connectionString)
+    private async Task<UploadResult> Upload(string filepath, string connectionString)
     {
         // The layers of wrapping are kind of disgusting, but we need an open StreamReader to create a CsvReader
         // The CsvReader gives us access to CsvDataReader to stream from the table (to the SqlBulkCopy)
@@ -210,11 +215,19 @@ public class ModelMappingUploader
             await bulkCopy.WriteToServerAsync(dr);
             await transaction.CommitAsync();
             await this.Report("Complete!\n", ReportLevel.SUCCESS);
+            return UploadResult.Complete;
+        }
+        catch (CsvHelperException ex)
+        {
+            await transaction.RollbackAsync();
+            await this.Report($"CSV formatting error: {ex.Message}\n", ReportLevel.ERROR);
+            return UploadResult.ErroredOut;
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
             await this.Report($"Bulk Copy Error: {ex.Message}\n", ReportLevel.ERROR);
+            return UploadResult.ErroredOut;
         }
     }
 

@@ -219,23 +219,23 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
             switch (result)
             {
                 case UploadResult.Complete:
-                    this.ProgressPercent = 100;
+                    this.ProgressPercent = 101;
                     await Task.Delay(750);
                     await this.RefreshData();
                     this.ToastService.Notify(new (ToastType.Success, $"{successMessage}!"));
                     break;
                 case UploadResult.CompleteWithErrors:
-                    this.ProgressPercent = 100;
+                    this.ProgressPercent = 101;
                     await Task.Delay(750);
                     await this.RefreshData();
                     this.ToastService.Notify(new (ToastType.Warning, $"{successMessage} with errors. Check the summary table and log to see what didn't go through."));
                     break;
                 case UploadResult.ErroredOut:
-                    Report? error = this.Reporter.Logs.FirstOrDefault();
+                    Report? error = this.Reporter.Logs.LastOrDefault(log => log.level == ReportLevel.ERROR) ?? this.Reporter.Logs.LastOrDefault();
                     this.ToastService.Notify(new (ToastType.Danger, $"{error?.message ?? "There was an error that prevented your upload from completing"}. Please verify your file."));
                     break;
                 case UploadResult.Canceled:
-                    this.ProgressPercent = 100;
+                    this.ProgressPercent = 101;
                     this.ToastService.Notify(new (ToastType.Secondary, "Upload canceled."));
                     break;
             }
