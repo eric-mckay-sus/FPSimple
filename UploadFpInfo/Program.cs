@@ -86,7 +86,7 @@ public class FPSheetUploader
         {
             await this.Report($"No file specified. Defaulting to config file input location ({path})\n");
         }
-        else if (!Path.Exists(path))
+        else if (!Path.Exists(filename))
         {
             await this.Report($"Path '{filename}' is not a valid directory or Excel file. Using Config default ({path}).\n", ReportLevel.WARNING);
         }
@@ -262,7 +262,7 @@ public class FPSheetUploader
             // If every row was duplicate, assume the file was already uploaded for this model.
             if (dt.Rows.Count == 0 && parseResult.HasDuplicate)
             {
-                await this.Report($"This portion of {GetFileName(path)} has already been uploaded under {metadata.Model}, so it has been skipped.");
+                await this.Report($"\tThis portion of {GetFileName(path)} has already been uploaded under {metadata.Model}, so it has been skipped.\n", ReportLevel.WARNING);
                 parseResult |= new ParseResult { alreadyUploaded = true };
             }
 
@@ -372,8 +372,8 @@ public class FPSheetUploader
             // Verify that the model actually exists (this is why the MTL database is prerequisite for this program)
             if (!await ValidateModel(model))
             {
-                await this.Report($"\t{model} is not in the model to line database. Please try again.\n", ReportLevel.WARNING);
                 error = $"{model} is not in the model to line database. Please try again.";
+                await this.Report($"\t{error}\n", ReportLevel.WARNING);
                 isNewModel = false;
                 continue;
             }
@@ -388,6 +388,10 @@ public class FPSheetUploader
                 error = null;
                 continue;
             }
+
+            // Assign the returned filter values so they are actually applied
+            isFiltering = filterResult.Value.isFiltering;
+            targetColIndex = filterResult.Value.targetColIndex;
 
             // If we make it here without manually triggering a repeat, the input is valid
             return (model, isFiltering, targetColIndex);
