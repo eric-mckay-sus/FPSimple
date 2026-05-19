@@ -290,12 +290,9 @@ public partial class CreateSample : TableManager<Sample>
     private void CloseForm()
     {
         this.isFormExpanded = false;
-        this.formData = new ();
+        this.formData.DummySampleNum = 0;
+        this.formData.CreatorNum = null;
         this.errorMessage = null;
-
-        // Reload available lists
-        this.availableModels = this.allMappings.Select(m => m.Model).Distinct().OrderBy(x => x).ToList();
-        this.availableLines = this.allMappings.Select(m => m.Line).Distinct().OrderBy(x => x).ToList();
     }
 
     /// <summary>
@@ -316,10 +313,8 @@ public partial class CreateSample : TableManager<Sample>
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.SampleId == newId);
 
-            this.formData = new (); // Reset form
             await this.RefreshData();
-            this.isAwaitingPrint = this.justCreatedSample != null;
-            this.isFormExpanded = false; // Auto-collapse on success to show the table
+            this.CloseForm();
             this.ToastService.Notify(new (ToastType.Success, "Sample created successfully!"));
         }
         catch (Exception ex)
@@ -495,6 +490,6 @@ public partial class CreateSample : TableManager<Sample>
         /// <summary>
         /// Gets or sets the new sample's creator name.
         /// </summary>
-        public string CreatorNum { get; set; } = string.Empty;
+        public int? CreatorNum { get; set; }
     }
 }
