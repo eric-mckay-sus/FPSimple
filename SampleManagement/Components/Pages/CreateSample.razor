@@ -130,7 +130,7 @@
                     disabled="@((selectedForPrint?.Count ?? 0) == 0 || isPrinting)"
                     title="Send print request after selecting at least one sample"
                     @onclick="HandlePrint">
-                <Icon Name="IconName.Printer" /> Confirm Print
+                <Icon Name="IconName.Printer" /> Confirm Print (@printDpi DPI)
             </button>
         }
         else
