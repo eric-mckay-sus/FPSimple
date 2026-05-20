@@ -17,9 +17,9 @@ using System.Net.Sockets;
 public partial class CreateSample : TableManager<Sample>
 {
     /// <summary>
-    /// List of all entries in the MTL table.
+    /// Materialized list of all distinct model-line pairs in the MTL table for simple filtering without DB interaction.
     /// </summary>
-    private IList<ModelLine> allMappings = [];
+    private IList<(string Model, string Line)> allMappings = [];
 
     /// <summary>
     /// The pending sample to be added upon validation.
@@ -89,7 +89,7 @@ public partial class CreateSample : TableManager<Sample>
     /// <summary>
     /// Tracks whether the user is viewing the 'print new sample?' prompt.
     /// </summary>
-    private bool isAwaitingPrint =  false;
+    private bool isAwaitingPrint = false;
 
     /// <summary>
     /// Stores the <see cref="Sample"/> object that was most recently created in this session, if applicable.
@@ -128,37 +128,47 @@ public partial class CreateSample : TableManager<Sample>
         this.formData.DummySampleNum < 1;
 
     /// <summary>
-    /// Resets the filters and fetches the sample table.
-    /// </summary>
-    /// <param name="keepPage"><inheritdoc/></param>
-    /// <returns>A Task representing that data has been successfully refreshed.</returns>
-    public override async Task RefreshData(bool keepPage = false)
-    {
-        using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
-
-        // Fetch the mapping table once to handle bidirectional filtering in memory
-        this.allMappings = await context.ModelToLine.ToListAsync();
-
-        // Initialize the UI lists with everything
-        this.availableModels = this.allMappings.Select(m => m.Model).Distinct().OrderBy(x => x).ToList();
-        this.availableLines = this.allMappings.Select(m => m.Line).Distinct().OrderBy(x => x).ToList();
-
-        await base.RefreshData(keepPage);
-    }
-
-    /// <summary>
     /// When this page loads, set the sorting information, then let the parent set up.
     /// </summary>
+    /// <remarks>Because this.allMappings is only populated on page load, recent data can only be retrieved with a refresh.</remarks>
     /// <returns>A Task representing that the page has loaded.</returns>
     protected override async Task OnInitializedAsync()
     {
+        // Get all the model-line pairs that have a model in the foolproof sheet database (thus have a dummy sample number)
+        using (FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync())
+        {
+            this.allMappings = await context.ModelToLine
+                                    .AsNoTracking()
+                                    .Join(
+                                        context.FoolproofInfo,
+                                        mtl => mtl.Model,
+                                        fp => fp.Model,
+                                        (mtl, fp) => new { mtl.Model, mtl.Line })
+                                    .Select(x => ValueTuple.Create(x.Model, x.Line))
+                                    .Distinct()
+                                    .ToListAsync();
+        }
+
+        // Initialize the model/line lists with everything from allMappings
+        this.availableModels = this.allMappings
+                                    .Select(m => m.Model)
+                                    .Distinct()
+                                    .OrderBy(x => x)
+                                    .ToList();
+
+        this.availableLines = this.allMappings
+                                    .Select(m => m.Line)
+                                    .Distinct()
+                                    .OrderBy(x => x)
+                                    .ToList();
+
         this.SortList.Add(new ("CreationDate", SortDir.Desc));
         this.SortList.Add(new ("SampleId", SortDir.Desc));
         await base.OnInitializedAsync();
     }
 
     /// <summary>
-    /// Filters out samples samples that are inactive and approved, so they are not inadvertently printed.
+    /// Filters out samples samples that are approved, so they cannot be reprinted.
     /// Also applies model/line filters if applicable.
     /// </summary>
     /// <param name="query"><inheritdoc/></param>
@@ -223,7 +233,6 @@ public partial class CreateSample : TableManager<Sample>
         bool hasModel = !string.IsNullOrEmpty(searchModel);
         bool hasLine = !string.IsNullOrEmpty(searchLine);
 
-        // These manual state checks look inefficient, but they are very readable, and the compiler optimizes them.
         switch (hasModel, hasLine)
         {
             // If there's no model or line, clear any existing filters
