@@ -350,6 +350,7 @@ public class FPSheetUploader
     /// <returns>A tuple representing the model, whether there is a filter, and the target column number.</returns>
     private async Task<(string, bool, int)> CollectUserInput(string filename, bool isNewModel)
     {
+        string? potentialModel;
         string model = string.Empty;
         string? error = null;
         bool isFiltering = false;
@@ -360,23 +361,27 @@ public class FPSheetUploader
         {
             await this.Report($"{(isNewModel ? "[NEW]" : "[REPEAT]")} {filename}\n", ReportLevel.IMPORTANT);
             Report modelPrompt = new ($"\tPlease enter the C. Core model name for the contents to be imported (or type 'SKIP' to proceed to the next file):");
-            model = (await this.input.GetInputAsync(modelPrompt, error)).Trim();
+            potentialModel = (await this.input.GetInputAsync(modelPrompt, error)).Trim();
 
             // If the user says to skip, return immediately without prompting for any more info
-            if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
+            if (potentialModel.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
             {
                 await this.Report($"\tSkipping file: {filename}\n", ReportLevel.WARNING);
-                return (model, isFiltering, targetColIndex);
+                return (potentialModel, isFiltering, targetColIndex);
             }
 
+            potentialModel = await ValidateModel(potentialModel);
+
             // Verify that the model actually exists (this is why the MTL database is prerequisite for this program)
-            if (!await ValidateModel(model))
+            if (string.IsNullOrEmpty(potentialModel))
             {
                 error = $"{model} is not in the model to line database. Please try again.";
                 await this.Report($"\t{error}\n", ReportLevel.WARNING);
                 isNewModel = false;
                 continue;
             }
+
+            model = potentialModel;
 
             // After the model has been obtained, get an optional column filter
             (bool isFiltering, int targetColIndex)? filterResult = await this.CollectColumnFilter(model);

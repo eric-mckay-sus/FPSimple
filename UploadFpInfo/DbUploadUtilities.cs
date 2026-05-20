@@ -24,27 +24,27 @@ public static class DbUploadUtilities
     /// Verifies that a particular model exists in the model to line (MTL) database.
     /// </summary>
     /// <param name="toValidate">The model name to validate.</param>
-    /// <returns>Whether <paramref name="toValidate"/> exists in the MTL database.</returns>
-    public static async Task<bool> ValidateModel(string? toValidate)
+    /// <returns>The string <paramref name="toValidate"/> as it appears in the MTL database, otherwise null.</returns>
+    public static async Task<string?> ValidateModel(string? toValidate)
     {
         if (string.IsNullOrWhiteSpace(toValidate))
         {
-            return false;
+            return null;
         }
 
         using SqlConnection conn = new (Config.GetConnectionString());
         await conn.OpenAsync();
 
         string sql = @"
-            SELECT COUNT(*) FROM dbo.ModelToLine
+            SELECT TOP 1 shortDesc FROM dbo.ModelToLine
                    WHERE shortDesc = @model";
 
         using SqlCommand cmd = new (sql, conn);
         cmd.Parameters.AddWithValue("@model", toValidate);
 
-        int count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
+        string? actual = (string?)await cmd.ExecuteScalarAsync();
 
-        return count > 0;
+        return actual;
     }
 
     /// <summary>
