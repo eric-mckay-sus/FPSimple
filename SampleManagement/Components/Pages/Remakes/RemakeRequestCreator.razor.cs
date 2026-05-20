@@ -216,9 +216,10 @@ public partial class RemakeRequestCreator : TableManager<Sample>
             using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
             await context.Database.ExecuteSqlInterpolatedAsync($@"
                 EXEC [dbo].[RequestRemake]
-                    @sampleID    = {this.pendingSample.SampleId},
+                    @sampleID = {this.pendingSample.SampleId},
                     @requesterNum = {this.formData.AssociateNum},
-                    @reasonID    = {this.formData.ReasonId}");
+                    @reasonID = {this.formData.ReasonId},
+                    @note = {this.formData.AdditionalNote}");
 
             await this.RefreshData();
             this.ToastService.Notify(new (ToastType.Success, $"Remake requested for sample #{this.pendingSample.SampleId}."));
@@ -251,5 +252,10 @@ public partial class RemakeRequestCreator : TableManager<Sample>
         /// Gets or sets the selected remake reason ID.
         /// </summary>
         public byte? ReasonId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the optional note used by associates to communicate context.
+        /// </summary>
+        public string? AdditionalNote { get; set; }
     }
 }
