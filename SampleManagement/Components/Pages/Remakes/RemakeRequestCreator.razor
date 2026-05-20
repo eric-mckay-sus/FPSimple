@@ -29,14 +29,14 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">Your Associate Number</label>
                             <input type="number"
                                    class="form-control"
                                    @bind="formData.AssociateNum"
                                    placeholder="Enter your associate number" />
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-5 mb-3">
                             <label class="form-label">Reason for Remake</label>
                             <select class="form-select form-control" @bind="formData.ReasonId">
                                 <option value="" disabled selected>-- Select a reason --</option>
@@ -45,6 +45,14 @@
                                     <option value="@reason.ReasonId">@reason.ReasonText</option>
                                 }
                             </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Additional Note (optional)</label>
+                            <input type="text"
+                                   class="form-control"
+                                   maxlength="50"
+                                   @bind="formData.AdditionalNote"
+                                   placeholder="Describe the situation (50 char limit)" />
                         </div>
                     </div>
 
