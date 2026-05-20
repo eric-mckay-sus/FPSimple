@@ -98,6 +98,7 @@ public partial class ZebraPrintFlow
 
     /// <summary>
     /// Uploads/prints to the ZPL printer connected via <paramref name="zplConn"/> according to the instructions in <paramref name="zplCmd"/>.
+    /// Uses manual connection management to avoid closing a connection during a batch.
     /// </summary>
     /// <param name="zplCmd">The <see cref="ZplCommand"/> containing upload/print information.</param>
     /// <param name="zplConn">The <see cref="TcpClient"/> representing the printer connection.</param>
@@ -113,9 +114,19 @@ public partial class ZebraPrintFlow
                 await zplConn.ConnectAsync(Config.PrinterIp, Config.PrinterPort);
             }
 
-            using NetworkStream stream = zplConn.GetStream();
+            NetworkStream stream = zplConn.GetStream();
 
-            await this.PrintAsync(zplCmd, stream);
+            try
+            {
+                await this.PrintAsync(zplCmd, stream);
+            }
+            finally
+            {
+                if (!leaveOpen)
+                {
+                    await stream.DisposeAsync();
+                }
+            }
 
             return new Report("Print complete", ReportLevel.SUCCESS);
         }
