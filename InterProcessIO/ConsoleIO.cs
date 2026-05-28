@@ -24,6 +24,7 @@ public class ConsoleInputProvider : IInputProvider
         if (previousError != null)
         {
             Console.WriteLine(new Report(previousError, ReportLevel.ERROR).ToAnsiString());
+            Console.Write('\t');
         }
 
         // Always show the prompt (with proper formatting)
