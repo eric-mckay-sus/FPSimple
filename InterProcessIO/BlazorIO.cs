@@ -83,6 +83,11 @@ public class BlazorReporter : IOutputProvider
     public event Func<Task>? OnNotify;
 
     /// <summary>
+    /// Notify the UI that there is a new progress event
+    /// </summary>
+    public event Func<ProgressEvent, Task>? OnProgressEventChanged;
+
+    /// <summary>
     /// Gets the name of the file currently being processed.
     /// </summary>
     public string CurrentFileName { get; private set; } = string.Empty;
@@ -190,6 +195,7 @@ public class BlazorReporter : IOutputProvider
                 break;
         }
 
+        this.OnProgressEventChanged?.Invoke(ev);
         this.OnNotify?.Invoke();
         return Task.CompletedTask;
     }

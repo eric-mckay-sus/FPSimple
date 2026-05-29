@@ -165,6 +165,7 @@ public class ModelMappingUploader
                 return UploadResult.Canceled;
             }
 
+            await this.output.ReportProgress(ProgressEvent.FileStarted);
             UploadResult uploadResult = await this.Upload(path, Config.GetConnectionString());
             return uploadResult;
         }
@@ -187,6 +188,8 @@ public class ModelMappingUploader
     /// <param name="connectionString">The DB connection string.</param>
     private async Task<UploadResult> Upload(string filepath, string connectionString)
     {
+        await this.output.SetCurrentFile(filepath);
+
         // The layers of wrapping are kind of disgusting, but we need an open StreamReader to create a CsvReader
         // The CsvReader gives us access to CsvDataReader to stream from the table (to the SqlBulkCopy)
         using StreamReader reader = new (filepath);
@@ -202,12 +205,15 @@ public class ModelMappingUploader
 
         try
         {
+            await this.output.ReportProgress(ProgressEvent.ClearStarted);
+
             // Now parsing is complete, prepare to completely overwrite old DB state with new
             using (var deleteCommand = new SqlCommand("TRUNCATE TABLE EL2AuthorizedReset.dbo.ModelToLine", connection, transaction))
             {
                 await deleteCommand.ExecuteNonQueryAsync();
             }
 
+            await this.output.ReportProgress(ProgressEvent.UploadStarted);
             await this.Report("Uploading...");
             using SqlBulkCopy bulkCopy = new (connection, SqlBulkCopyOptions.Default, transaction);
             bulkCopy.DestinationTableName = "ModelToLine";
@@ -215,6 +221,7 @@ public class ModelMappingUploader
             await bulkCopy.WriteToServerAsync(dr);
             await transaction.CommitAsync();
             await this.Report("Complete!\n", ReportLevel.SUCCESS);
+            await this.output.ReportProgress(ProgressEvent.UploadComplete);
             return UploadResult.Complete;
         }
         catch (CsvHelperException ex)

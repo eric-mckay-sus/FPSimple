@@ -32,6 +32,7 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
         this.InputProvider.OnConfirmationRequested += this.HandleConfirmationRequested;
 
         this.Reporter.OnNotify += this.HandleReporterNotify;
+        this.Reporter.OnProgressEventChanged += this.HandleProgressEventChanged;
 
         this.SortList.Add(new ("Model", SortDir.Asc));
         await base.OnInitializedAsync();
@@ -108,22 +109,31 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
         await this.InvokeAsync(this.StateHasChanged);
     }
 
-    private async Task HandleReporterNotify()
+    private async Task HandleReporterNotify() => await this.InvokeAsync(this.StateHasChanged);
+
+    /// <summary>
+    /// Directly reacts to specific checkpoints during the upload pipeline.
+    /// </summary>
+    private async Task HandleProgressEventChanged(ProgressEvent ev)
     {
-        Report? lastLog = this.Reporter.Logs.LastOrDefault();
-        if (lastLog != null)
+        this.ProgressPercent = ev switch
         {
-            // Map CLI strings to GUI Progress
-            this.CurrentDisplayStatus = lastLog.message;
-            this.ProgressPercent = lastLog.message switch
-            {
-                string m when m.Contains("Connecting") => 20,
-                string m when m.Contains("Connected") => 40,
-                string m when m.Contains("Uploading") => 70,
-                string m when m.Contains("Complete") => 101,
-                _ => this.ProgressPercent
-            };
-        }
+            ProgressEvent.FileStarted => 10,
+            ProgressEvent.ClearStarted => 30,
+            ProgressEvent.UploadStarted => 60,
+            ProgressEvent.FileCompleted => 95,
+            ProgressEvent.UploadComplete => 100,
+            _ => this.ProgressPercent
+        };
+
+        this.CurrentDisplayStatus = ev switch
+        {
+            ProgressEvent.FileStarted => "Initializing parsing stream...",
+            ProgressEvent.ClearStarted => "Clearing existing target tables...",
+            ProgressEvent.UploadStarted => "Streaming new mappings to table...",
+            ProgressEvent.FileCompleted or ProgressEvent.UploadComplete => "Database successfully updated!",
+            _ => this.CurrentDisplayStatus
+        };
 
         await this.InvokeAsync(this.StateHasChanged);
     }
