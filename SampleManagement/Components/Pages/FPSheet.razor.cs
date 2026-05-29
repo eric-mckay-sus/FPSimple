@@ -131,7 +131,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         foreach (IBrowserFile file in this.selectedFiles)
         {
             string trustedFileName = $"{Path.GetFileNameWithoutExtension(file.Name)}_{DateTime.Now:yyyy-MM-dd}{Path.GetExtension(file.Name)}";
-            string filePath = Path.Combine(UploadsFolderPath, trustedFileName);
+            string filePath = Path.Combine(this.UploadsFolderPath, trustedFileName);
 
             // Stream the file data from the element to the server (must use block using statement to close stream before the uploader tries to create a new one)
             using (FileStream stream = new (filePath, FileMode.Create))
@@ -143,7 +143,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
         this.Reporter.InitializeProgress(this.selectedFiles.Count);
         FPSheetUploader uploader = new (this.InputProvider, this.Reporter);
-        return await uploader.ExecuteAsync(UploadsFolderPath); // Batch it even when only one file (for simplicity)
+        return await uploader.ExecuteAsync(this.UploadsFolderPath); // Batch it even when only one file (for simplicity)
     }
 
     /// <summary>
