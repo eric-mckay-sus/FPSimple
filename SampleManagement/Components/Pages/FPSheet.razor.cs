@@ -67,6 +67,10 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         base.Dispose(disposing);
         if (disposing)
         {
+            this.InputProvider.OnConfirmationRequested -= this.HandleConfirmationRequested;
+            this.InputProvider.OnInputRequested -= this.HandleInputRequested;
+            this.Reporter.OnNotify -= this.HandleReporterNotify;
+
             this.logDebounce?.Cancel();
             this.logDebounce?.Dispose();
         }
@@ -80,67 +84,12 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     protected override async Task OnInitializedAsync()
     {
         // Link the input provider events to this component's state
-        this.InputProvider.OnConfirmationRequested += async (prompt) =>
-        {
-            this.currentPrompt = prompt.message;
-            this.IsAwaitingConfirmation = true;
-            await this.InvokeAsync(this.StateHasChanged);
-        };
+        this.InputProvider.OnConfirmationRequested += this.HandleConfirmationRequested;
 
-        this.InputProvider.OnInputRequested += async (prompt, error) =>
-        {
-            this.currentPrompt = ParenthesesClipper().Replace(prompt.message, string.Empty).Trim();
-            this.inputError = error;
-            this.UserInputText = string.Empty;
-            this.IsAwaitingInput = true;
-            await this.InvokeAsync(this.StateHasChanged);
-            try
-            {
-                await Task.Delay(100);
-                await this.JS.InvokeVoidAsync("focusElement", "model-input");
-            }
-            catch (OperationCanceledException)
-            {
-                // This exception is always thrown when a CancellationToken is used
-            }
-            catch (JSDisconnectedException)
-            {
-                // This exception is common when dealing with asynchronous JS interop
-            }
-        };
+        this.InputProvider.OnInputRequested += this.HandleInputRequested;
 
         // Do the same for the output provider events
-        this.Reporter.OnNotify += async () =>
-        {
-            if (this.logDebounce != null)
-            {
-                await this.logDebounce.CancelAsync();
-            }
-
-            this.logDebounce = new ();
-            CancellationToken token = this.logDebounce.Token;
-            try
-            {
-                await Task.Delay(100, token);
-
-                await this.InvokeAsync(this.StateHasChanged);
-
-                if (this.Reporter.Logs.Any())
-                {
-                    // Small delay ensures the DOM has rendered the new <div> before scrolling
-                    await Task.Delay(10);
-                    await this.JS.InvokeVoidAsync("scrollToBottom", "log-container");
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // This exception is always thrown when a CancellationToken is used
-            }
-            catch (JSDisconnectedException)
-            {
-                // This exception is common when dealing with asynchronous JS interop
-            }
-        };
+        this.Reporter.OnNotify += this.HandleReporterNotify;
 
         using (FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync())
         {
@@ -182,7 +131,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         foreach (IBrowserFile file in this.selectedFiles)
         {
             string trustedFileName = $"{Path.GetFileNameWithoutExtension(file.Name)}_{DateTime.Now:yyyy-MM-dd}{Path.GetExtension(file.Name)}";
-            string filePath = Path.Combine(UploadsFolderPath, trustedFileName);
+            string filePath = Path.Combine(this.UploadsFolderPath, trustedFileName);
 
             // Stream the file data from the element to the server (must use block using statement to close stream before the uploader tries to create a new one)
             using (FileStream stream = new (filePath, FileMode.Create))
@@ -194,7 +143,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
         this.Reporter.InitializeProgress(this.selectedFiles.Count);
         FPSheetUploader uploader = new (this.InputProvider, this.Reporter);
-        return await uploader.ExecuteAsync(UploadsFolderPath); // Batch it even when only one file (for simplicity)
+        return await uploader.ExecuteAsync(this.UploadsFolderPath); // Batch it even when only one file (for simplicity)
     }
 
     /// <summary>
@@ -227,6 +176,67 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         else
         {
             return string.Empty;
+        }
+    }
+
+    private async Task HandleConfirmationRequested(Report prompt)
+    {
+        this.currentPrompt = prompt.message;
+        this.IsAwaitingConfirmation = true;
+        await this.InvokeAsync(this.StateHasChanged);
+    }
+
+    private async Task HandleInputRequested(Report prompt, string? error)
+    {
+        this.currentPrompt = ParenthesesClipper().Replace(prompt.message, string.Empty).Trim();
+        this.inputError = error;
+        this.UserInputText = string.Empty;
+        this.IsAwaitingInput = true;
+        await this.InvokeAsync(this.StateHasChanged);
+        try
+        {
+            await Task.Delay(100);
+            await this.JS.InvokeVoidAsync("focusElement", "model-input");
+        }
+        catch (OperationCanceledException)
+        {
+            // This exception is always thrown when a CancellationToken is used
+        }
+        catch (JSDisconnectedException)
+        {
+            // This exception is common when dealing with asynchronous JS interop
+        }
+    }
+
+    private async Task HandleReporterNotify()
+    {
+        if (this.logDebounce != null)
+        {
+            await this.logDebounce.CancelAsync();
+        }
+
+        this.logDebounce = new ();
+        CancellationToken token = this.logDebounce.Token;
+        try
+        {
+            await Task.Delay(100, token);
+
+            await this.InvokeAsync(this.StateHasChanged);
+
+            if (this.Reporter.Logs.Any())
+            {
+                // Small delay ensures the DOM has rendered the new <div> before scrolling
+                await Task.Delay(10);
+                await this.JS.InvokeVoidAsync("scrollToBottom", "log-container");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // This exception is always thrown when a CancellationToken is used
+        }
+        catch (JSDisconnectedException)
+        {
+            // This exception is common when dealing with asynchronous JS interop
         }
     }
 

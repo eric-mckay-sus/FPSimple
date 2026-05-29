@@ -105,6 +105,16 @@ public enum ProgressEvent
     FileCompleted,
 
     /// <summary>
+    /// The event representing when deletion begins.
+    /// </summary>
+    ClearStarted,
+
+    /// <summary>
+    /// The event representing when the actual DB writing begins.
+    /// </summary>
+    UploadStarted,
+
+    /// <summary>
     /// The event representing when the entire upload is complete.
     /// </summary>
     UploadComplete,

@@ -29,34 +29,27 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     protected override async Task OnInitializedAsync()
     {
         // Link the provider events to this component's state
-        this.InputProvider.OnConfirmationRequested += (prompt) =>
-        {
-            this.IsAwaitingConfirmation = true;
-            this.InvokeAsync(this.StateHasChanged);
-        };
+        this.InputProvider.OnConfirmationRequested += this.HandleConfirmationRequested;
 
-        this.Reporter.OnNotify += () =>
-        {
-            Report? lastLog = this.Reporter.Logs.LastOrDefault();
-            if (lastLog != null)
-            {
-                // Map CLI strings to GUI Progress
-                this.CurrentDisplayStatus = lastLog.message;
-                this.ProgressPercent = lastLog.message switch
-                {
-                    string m when m.Contains("Connecting") => 20,
-                    string m when m.Contains("Connected") => 40,
-                    string m when m.Contains("Uploading") => 70,
-                    string m when m.Contains("Complete") => 101,
-                    _ => this.ProgressPercent
-                };
-            }
-
-            this.InvokeAsync(this.StateHasChanged);
-        };
+        this.Reporter.OnNotify += this.HandleReporterNotify;
+        this.Reporter.OnProgressEventChanged += this.HandleProgressEventChanged;
 
         this.SortList.Add(new ("Model", SortDir.Asc));
         await base.OnInitializedAsync();
+    }
+
+    /// <summary>
+    /// When this page is closed, dispose as defined by the parent, then clean up the debounce cancellation token.
+    /// </summary>
+    /// <param name="disposing">Whether to actually dispose. This is a help for the garbage collector.</param>
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing)
+        {
+            this.InputProvider.OnConfirmationRequested -= this.HandleConfirmationRequested;
+            this.Reporter.OnNotify -= this.HandleReporterNotify;
+        }
     }
 
     /// <summary>
@@ -93,7 +86,7 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
 
         string extension = Path.GetExtension(this.selectedFile.Name);
         string trustedFileName = $"model_line_mappings_{DateTime.Now:yyyy-MM-dd}";
-        this.filePath = Path.Combine(UploadsFolderPath, trustedFileName + extension);
+        this.filePath = Path.Combine(this.UploadsFolderPath, trustedFileName + extension);
 
         // Stream the file data from the element to the server (must use block using statement to close stream before the uploader tries to create a new one)
         using (FileStream stream = new (this.filePath, FileMode.Create))
@@ -109,6 +102,41 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     /// <inheritdoc/>
     /// </summary>
     protected override void OnUploadCleanup() => this.selectedFile = null;
+
+    private async Task HandleConfirmationRequested(Report prompt)
+    {
+        this.IsAwaitingConfirmation = true;
+        await this.InvokeAsync(this.StateHasChanged);
+    }
+
+    private async Task HandleReporterNotify() => await this.InvokeAsync(this.StateHasChanged);
+
+    /// <summary>
+    /// Directly reacts to specific checkpoints during the upload pipeline.
+    /// </summary>
+    private async Task HandleProgressEventChanged(ProgressEvent ev)
+    {
+        this.ProgressPercent = ev switch
+        {
+            ProgressEvent.FileStarted => 10,
+            ProgressEvent.ClearStarted => 30,
+            ProgressEvent.UploadStarted => 60,
+            ProgressEvent.FileCompleted => 95,
+            ProgressEvent.UploadComplete => 100,
+            _ => this.ProgressPercent
+        };
+
+        this.CurrentDisplayStatus = ev switch
+        {
+            ProgressEvent.FileStarted => "Initializing parsing stream...",
+            ProgressEvent.ClearStarted => "Clearing existing target tables...",
+            ProgressEvent.UploadStarted => "Streaming new mappings to table...",
+            ProgressEvent.FileCompleted or ProgressEvent.UploadComplete => "Database successfully updated!",
+            _ => this.CurrentDisplayStatus
+        };
+
+        await this.InvokeAsync(this.StateHasChanged);
+    }
 
     /// <summary>
     /// Set the selected file, with guard check to guarantee no visual flicker.

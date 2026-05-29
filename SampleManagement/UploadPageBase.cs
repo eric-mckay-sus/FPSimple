@@ -25,7 +25,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     /// <summary>
     /// Gets the path of the uploads folder for this session.
     /// </summary>
-    protected static string UploadsFolderPath { get => Path.Combine(Path.GetTempPath(), "uploads", field); } = Guid.NewGuid().ToString();
+    protected string UploadsFolderPath { get; } = Path.Combine(Path.GetTempPath(), "uploads", Guid.NewGuid().ToString());
 
     /// <summary>
     /// Gets or sets a value indicating whether the user is dragging a file over the file input location.
@@ -107,7 +107,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
             // Dispose the timer
             this.ProgressTimer?.Dispose();
 
-            this.CleanupFileSystem();
+            // Want to somehow clean up files from this run or mark that they are finished for future handling
             this.IsUploading = false;
         }
     }
@@ -115,15 +115,16 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     /// <summary>
     /// Cleans up this user's files that are on the server (i.e. unfinished uploads).
     /// </summary>
-    protected void CleanupFileSystem()
+    /// <returns>A Task representing that the files from this run are handled.</returns>
+    protected async Task CleanupFileSystem()
     {
         try
         {
             // Skip directory delete if there were no selected files (thus no need to create a directory)
-            if (Directory.Exists(UploadsFolderPath))
+            if (Directory.Exists(this.UploadsFolderPath))
             {
                 // Use recursive mode to delete the directory AND its contents
-                Directory.Delete(UploadsFolderPath, true);
+                Directory.Delete(this.UploadsFolderPath, true);
             }
         }
         catch (IOException ex)
@@ -210,7 +211,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
 
         try
         {
-            Directory.CreateDirectory(UploadsFolderPath);
+            Directory.CreateDirectory(this.UploadsFolderPath);
             await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
 
             // Execute the specific logic passed from the child
@@ -246,7 +247,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
         }
         finally
         {
-            this.CleanupFileSystem();
+            await this.CleanupFileSystem();
             await this.JS.InvokeVoidAsync("preventConfigurationLoss.clearEditorHandler");
             this.OnUploadCleanup(); // Opening for children to clear their specific file lists
             this.IsUploading = false;
