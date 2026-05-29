@@ -27,12 +27,12 @@ public class BlazorInputProvider : IInputProvider
     /// <summary>
     /// The Blazor action to perform when GetInputAsync is called.
     /// </summary>
-    public event Action<Report, string?>? OnInputRequested;
+    public event Func<Report, string?, Task>? OnInputRequested;
 
     /// <summary>
     /// The Blazor action to perform when a simple yes/no confirmation is requested
     /// </summary>
-    public event Action<Report>? OnConfirmationRequested;
+    public event Func<Report, Task>? OnConfirmationRequested;
 
     /// <summary>
     /// <inheritdoc/>
@@ -80,7 +80,7 @@ public class BlazorReporter : IOutputProvider
     /// <summary>
     /// Notify the UI to re-render. The Blazor page must bind its StateHasChanged method to this Action.
     /// </summary>
-    public event Action? OnNotify;
+    public event Func<Task>? OnNotify;
 
     /// <summary>
     /// Gets the name of the file currently being processed.
@@ -125,10 +125,10 @@ public class BlazorReporter : IOutputProvider
     /// </summary>
     /// <param name="totalFiles">The number of files in this batch.</param>
     public void InitializeProgress(int totalFiles)
-{
-    this.Progress = new BatchProgress { TotalFiles = totalFiles };
-    this.OnNotify?.Invoke();
-}
+    {
+        this.Progress = new BatchProgress { TotalFiles = totalFiles };
+        this.OnNotify?.Invoke();
+    }
 
     /// <summary>
     /// Clears the logs so old data does not persist.

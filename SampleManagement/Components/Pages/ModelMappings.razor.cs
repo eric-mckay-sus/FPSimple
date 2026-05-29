@@ -29,34 +29,26 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     protected override async Task OnInitializedAsync()
     {
         // Link the provider events to this component's state
-        this.InputProvider.OnConfirmationRequested += (prompt) =>
-        {
-            this.IsAwaitingConfirmation = true;
-            this.InvokeAsync(this.StateHasChanged);
-        };
+        this.InputProvider.OnConfirmationRequested += this.HandleConfirmationRequested;
 
-        this.Reporter.OnNotify += () =>
-        {
-            Report? lastLog = this.Reporter.Logs.LastOrDefault();
-            if (lastLog != null)
-            {
-                // Map CLI strings to GUI Progress
-                this.CurrentDisplayStatus = lastLog.message;
-                this.ProgressPercent = lastLog.message switch
-                {
-                    string m when m.Contains("Connecting") => 20,
-                    string m when m.Contains("Connected") => 40,
-                    string m when m.Contains("Uploading") => 70,
-                    string m when m.Contains("Complete") => 101,
-                    _ => this.ProgressPercent
-                };
-            }
-
-            this.InvokeAsync(this.StateHasChanged);
-        };
+        this.Reporter.OnNotify += this.HandleReporterNotify;
 
         this.SortList.Add(new ("Model", SortDir.Asc));
         await base.OnInitializedAsync();
+    }
+
+    /// <summary>
+    /// When this page is closed, dispose as defined by the parent, then clean up the debounce cancellation token.
+    /// </summary>
+    /// <param name="disposing">Whether to actually dispose. This is a help for the garbage collector.</param>
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing)
+        {
+            this.InputProvider.OnConfirmationRequested -= this.HandleConfirmationRequested;
+            this.Reporter.OnNotify -= this.HandleReporterNotify;
+        }
     }
 
     /// <summary>
@@ -109,6 +101,32 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     /// <inheritdoc/>
     /// </summary>
     protected override void OnUploadCleanup() => this.selectedFile = null;
+
+    private async Task HandleConfirmationRequested(Report prompt)
+    {
+        this.IsAwaitingConfirmation = true;
+        await this.InvokeAsync(this.StateHasChanged);
+    }
+
+    private async Task HandleReporterNotify()
+    {
+        Report? lastLog = this.Reporter.Logs.LastOrDefault();
+        if (lastLog != null)
+        {
+            // Map CLI strings to GUI Progress
+            this.CurrentDisplayStatus = lastLog.message;
+            this.ProgressPercent = lastLog.message switch
+            {
+                string m when m.Contains("Connecting") => 20,
+                string m when m.Contains("Connected") => 40,
+                string m when m.Contains("Uploading") => 70,
+                string m when m.Contains("Complete") => 101,
+                _ => this.ProgressPercent
+            };
+        }
+
+        await this.InvokeAsync(this.StateHasChanged);
+    }
 
     /// <summary>
     /// Set the selected file, with guard check to guarantee no visual flicker.
